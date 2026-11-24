@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WHEP 시청 POC</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<main>
+  <h1>시청 (WHEP)</h1>
+  <p class="lead"><a href="./">← 목록</a> · 자동 재생 정책 때문에 처음에는 음소거로 재생됩니다. 소리를 들으려면 "소리 켜기"를 누르세요.</p>
+
+  <section>
+    <div class="row">
+      <label>스트림 이름 <input id="stream" type="text" value="pc" size="10"></label>
+      <label><input id="autoRetry" type="checkbox" checked> 자동 재연결 (2초 간격)</label>
+    </div>
+    <div class="row">
+      <button id="btnPlay">시청 시작</button>
+      <button id="btnStop" class="danger" disabled>시청 중지</button>
+      <button id="btnUnmute" class="secondary">소리 켜기</button>
+      <span>상태: <span id="status" class="status">대기</span></span>
+    </div>
+    <video id="video" autoplay muted playsinline controls></video>
+  </section>
+
+  <section>
+    <h2>수신 통계</h2>
+    <p class="hint">음성 전달 확인: 송출 쪽에서 말할 때 audio 행의 "음량"과 kbps가 움직이는지 봅니다.</p>
+    <div id="stats" class="stats"></div>
+  </section>
+
+  <section>
+    <h2>로그</h2>
+    <div id="log" class="log"></div>
+  </section>
+
+  <section>
+    <h2>이 브라우저의 지원 여부</h2>
+    <div id="env"></div>
+  </section>
+</main>
+<script type="module" src="js/play.js"></script>
+</body>
+</html>

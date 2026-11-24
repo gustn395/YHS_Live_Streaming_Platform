@@ -1,0 +1,55 @@
+# MediaMTX WebRTC POC 전용 Compose
+# - 실행: poc/mediamtx-webrtc 폴더에서 `docker compose up -d`
+# - 실행 전 .env.example을 .env로 복사하고 POC_LAN_IP를 이 PC의 LAN IP로 바꾼다.
+# - 설명과 검증 결과: docs/testing/poc-mediamtx-webrtc.md
+name: yhs-poc-mediamtx
+
+services:
+  mediamtx:
+    # latest 금지. 버전을 바꾸면 결과 문서의 버전 기록도 같이 바꾼다.
+    image: bluenviron/mediamtx:1.21.4
+    restart: unless-stopped
+    environment:
+      # 브라우저에 알려 줄 ICE 후보 주소(이 PC의 LAN IP). mediamtx.yml의 webrtcAdditionalHosts를 덮어쓴다.
+      MTX_WEBRTCADDITIONALHOSTS: ${POC_LAN_IP:?POC_LAN_IP를 .env에 설정하세요}
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    ports:
+      # WebRTC 미디어(ICE/UDP). LAN의 다른 기기가 직접 붙어야 하므로 모든 인터페이스에 연다.
+      - "8189:8189/udp"
+      # WHIP/WHEP HTTP. LAN에서는 Caddy(HTTPS)로만 접근하고, 이 포트는 PC 내부 디버깅용으로만 연다.
+      - "127.0.0.1:8889:8889"
+      # Control API. 이 PC(localhost)에서만 접근한다.
+      - "127.0.0.1:9997:9997"
+    networks:
+      - poc
+
+  caddy:
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+    depends_on:
+      - mediamtx
+    environment:
+      POC_LAN_IP: ${POC_LAN_IP:?POC_LAN_IP를 .env에 설정하세요}
+    ports:
+      # POC 웹 페이지 + WHIP/WHEP 프록시(HTTPS, tls internal)
+      - "8443:8443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./web:/srv:ro
+      # 내부 CA(루트 인증서)가 여기에 저장된다. 볼륨을 지우면 루트 인증서가 바뀌어 기기에 다시 설치해야 한다.
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - poc
+
+networks:
+  poc:
+    ipam:
+      config:
+        # mediamtx.yml의 API 허용 대역·신뢰 프록시 대역과 같아야 한다.
+        - subnet: 10.250.0.0/24
+
+volumes:
+  caddy_data:
+  caddy_config:
