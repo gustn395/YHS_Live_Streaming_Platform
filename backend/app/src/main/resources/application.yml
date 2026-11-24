@@ -1,0 +1,20 @@
+# 기본 설정
+# - 외부 인프라(DB, Redis) 없이 실행된다. 연결 설정은 해당 모듈을 구현할 때 추가한다.
+# - 환경마다 다른 값과 비밀값은 환경변수로 받는다: ${ENV_NAME:기본값}
+#   비밀값(비밀번호, 토큰, 키)은 기본값을 두지 않고 이 파일에 적지 않는다.
+spring:
+  application:
+    name: yhs-live-streaming-backend
+
+server:
+  port: ${BACKEND_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # 상태 확인용 health만 웹에 노출한다.
+        include: health
+  endpoint:
+    health:
+      show-details: never

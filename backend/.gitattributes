@@ -1,0 +1,5 @@
+# core.autocrlf 설정과 관계없이 실행 스크립트의 줄바꿈을 고정한다.
+gradlew text eol=lf
+*.sh    text eol=lf
+*.bat   text eol=crlf
+*.jar   binary
