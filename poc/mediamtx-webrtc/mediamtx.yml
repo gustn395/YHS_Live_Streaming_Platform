@@ -1,0 +1,66 @@
+# MediaMTX v1.21.4 POC 설정
+# 적지 않은 항목은 MediaMTX 기본값을 쓴다.
+# 기본값 전체: https://github.com/bluenviron/mediamtx/blob/v1.21.4/mediamtx.yml
+
+###############################################
+# 로그
+logLevel: info
+logDestinations: [stdout]
+
+###############################################
+# 인증 (결정 Q4=a: POC에서는 송출 인증 없음, 신뢰할 수 있는 LAN에서만 사용)
+authMethod: internal
+authInternalUsers:
+  # 누구나 live/* 경로에 송출·시청할 수 있다. (경로 제한은 아래 paths에서 한다)
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+      - action: read
+  # Control API는 localhost와 POC Docker 네트워크에서만 쓸 수 있다.
+  # 호스트의 127.0.0.1:9997로 들어온 요청은 컨테이너에서 Docker 게이트웨이(10.250.0.1) 주소로 보인다.
+  - user: any
+    pass:
+    ips: ["127.0.0.1", "::1", "10.250.0.0/24"]
+    permissions:
+      - action: api
+
+###############################################
+# Control API (호스트에는 127.0.0.1:9997로만 노출한다. docker-compose.yml 참고)
+api: true
+apiAddress: :9997
+
+###############################################
+# POC에서 쓰지 않는 프로토콜은 끈다.
+rtsp: false
+rtmp: false
+hls: false
+srt: false
+moq: false
+
+###############################################
+# WebRTC (WHIP 송출 / WHEP 시청)
+webrtc: true
+webrtcAddress: :8889
+# HTTPS는 Caddy가 맡는다. (결정 Q2=a)
+webrtcEncryption: false
+# 페이지와 WHIP/WHEP가 같은 Caddy 주소(같은 origin)를 쓰므로 CORS가 필요 없다.
+webrtcAllowOrigins: []
+# Caddy가 보낸 X-Forwarded-For를 믿어 로그에 실제 클라이언트 IP를 남긴다.
+webrtcTrustedProxies: ["10.250.0.0/24"]
+# ICE 미디어용 UDP 포트. docker-compose.yml에서 8189/udp로 연다.
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: ""
+# 컨테이너 내부 IP(10.250.0.x)는 다른 기기가 닿을 수 없으므로 알리지 않는다.
+webrtcIPsFromInterfaces: false
+# 실제 값은 docker-compose.yml의 MTX_WEBRTCADDITIONALHOSTS(=POC_LAN_IP)로 덮어쓴다.
+webrtcAdditionalHosts: []
+# 결정 Q3=a: 같은 LAN만 검증하므로 STUN/TURN을 쓰지 않는다.
+webrtcICEServers2: []
+
+###############################################
+# 경로: live/<이름> 형식만 허용한다. 다른 경로는 거부된다.
+paths:
+  "~^live/[A-Za-z0-9_-]+$":
+    source: publisher
