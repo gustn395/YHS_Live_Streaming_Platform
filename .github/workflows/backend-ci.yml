@@ -1,0 +1,77 @@
+# 백엔드 CI: 전체 Gradle 모듈 빌드·테스트, 테스트 리포트·WAR 업로드
+# 정책과 검증 기록: docs/testing/step4-ci-coderabbit.md
+#
+# - paths 필터를 두지 않는다. main Ruleset의 필수 체크(backend-build)가 건너뛰어지면 PR이 병합 대기 상태로 남는다.
+# - Action은 커밋 SHA로 고정하고 태그를 주석으로 남긴다. 출시 후 14일 이상 지난 안정 버전만 쓴다.
+# - DB·Redis·MediaMTX 없이 동작한다. 서비스 컨테이너를 두지 않는다.
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.event.pull_request.number || github.ref }}
+  # PR은 새 커밋이 오면 이전 실행을 취소한다. main push는 취소하지 않는다.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    # 이 이름이 main Ruleset의 Required status check 이름이다. 바꾸면 Ruleset도 함께 바꾼다.
+    name: backend-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 17 (Temurin)
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          # MIT 오픈소스 캐시. 기본값(enhanced)은 상용 라이브러리를 쓴다.
+          cache-provider: basic
+          # gradle-wrapper.jar 체크섬 검증 (기본값 true를 명시)
+          validate-wrappers: true
+
+      - name: Build and test
+        run: ./gradlew clean build --stacktrace
+
+      - name: Upload test reports
+        # 테스트가 실패해도 수집한다. 취소된 실행만 건너뛴다.
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports
+          path: |
+            backend/**/build/reports/tests/
+            backend/**/build/test-results/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload executable WAR
+        if: ${{ success() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: backend-war
+          path: |
+            backend/app/build/libs/*.war
+            !backend/app/build/libs/*-plain.war
+          retention-days: 7
+          if-no-files-found: error

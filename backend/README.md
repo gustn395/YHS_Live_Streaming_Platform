@@ -45,6 +45,10 @@ curl http://localhost:8080/actuator/health
 
 DB, Redis, Docker가 없어도 실행·테스트된다.
 
+### CI (GitHub Actions)
+
+main 대상 PR, main push, 수동 실행(`workflow_dispatch`) 때 [`.github/workflows/backend-ci.yml`](../.github/workflows/backend-ci.yml)이 Ubuntu + Temurin 17에서 위 `./gradlew clean build`를 그대로 실행한다. Job 이름 `backend-build`는 main의 필수 체크다. 테스트 리포트(`test-reports`)는 실패해도 올라가고, 실행 가능한 WAR(`backend-war`)는 성공할 때만 올라간다. 정책·버전·검증 기록은 [`docs/testing/step4-ci-coderabbit.md`](../docs/testing/step4-ci-coderabbit.md)에 있다.
+
 ## 3. WAR
 
 `./gradlew build`(또는 `:app:bootWar :app:war`)는 `app/build/libs/`에 두 파일을 만든다.
