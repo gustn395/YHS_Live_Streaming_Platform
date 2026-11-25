@@ -2,12 +2,12 @@
 
 - 브랜치: `feature/infra-github-actions-ci`
 - 작성일: 2026-11-25
-- 상태: **로컬 구현·검증 완료. GitHub 실제 실행, CodeRabbit 연동, Ruleset 적용은 미실행** (5장 체크리스트, 6장 기록)
+- 상태: **PR #4에서 `pull_request` CI 성공, CodeRabbit 자동 리뷰 확인. Ruleset 적용, 실패·복구 검증, 병합 후 `push(main)`·`workflow_dispatch` 검증은 미실행** (5장 체크리스트, 6장 기록)
 - 범위: CI만. AWS·ECR·EC2·Docker Compose 배포·GitHub OIDC·CD Workflow는 제외(Streaming Phase 4 실기능 구현과 최초 수동 AWS 배포 검증 이후 별도 단계)
 
 ## 1. 결정 사항
 
-2026-11-25 사용자 결정 (정책 인터뷰 Q1~Q6).
+2026-11-25 사용자 결정 (정책 인터뷰 Q1~Q7).
 
 | ID | 결정 | 이유 |
 | --- | --- | --- |
@@ -28,7 +28,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 트리거 | `pull_request`(→ main), `push`(main), `workflow_dispatch`. **paths 필터 없음** |
+| 트리거 | `pull_request`(→ main), `push`(main), `workflow_dispatch`. **paths 필터 없음**. `workflow_dispatch`(수동 실행)는 기본 브랜치(main)에 이 워크플로가 있어야 실행할 수 있다([GitHub 문서](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)). 이 워크플로를 처음 추가하는 PR #4가 병합되기 전에는 쓸 수 없다 |
 | 권한 | 워크플로 전체 `contents: read`만 |
 | Runner | `ubuntu-24.04`, `timeout-minutes: 20` |
 | 필수 체크 이름 | Job 이름 `backend-build` (Ruleset에 이 이름으로 등록) |
@@ -169,18 +169,50 @@
 | 2026-11-25 | `git diff --check`, 추가 파일 민감정보 검색 | 이상 없음 |
 | 2026-11-25 | `.coderabbit.yaml`에서 `poc/**` 제외 규칙 제거 후 공식 스키마 재검증 | 오류 0 |
 | 2026-11-25 | `request_changes_workflow`와 `auto_approvals.enabled` 차이를 공식 스키마·문서로 확인 | 레거시 별칭으로 동작 같음. 3.1에 근거 기록 |
+| 2026-11-25 | PR #4 `Backend CI` 첫 실행(`pull_request`, 커밋 `b324229`), 공개 GitHub API로 Job·단계·Artifact 조회 | `backend-build` 성공. 단계 7개(Checkout, JDK 17, Gradle 설정, Build and test, 리포트·WAR 업로드) 모두 성공. Artifact `test-reports`(12,359 B), `backend-war`(19,903,666 B, 실행 가능한 WAR) 생성. **테스트 3개 개별 결과와 wrapper 검증 로그는 미확인**(로그·Artifact 내용을 열어 보지 않음) |
+| 2026-11-25 | PR #4 CodeRabbit 자동 리뷰, 공개 GitHub API로 조회 | 요약 코멘트 1개, 리뷰 1건(상태 `COMMENTED`, 승인·변경 요청 아님), 인라인 지적 1개: 이 문서 6.1의 `workflow_dispatch` 검증을 최초 main 병합 뒤로 옮기라는 지적(Minor) → 6.1에 반영 |
+| 2026-11-25 | CodeRabbit 지적 반영 후 이 문서만 수정, `git diff --check` | 통과. 변경 파일은 이 문서 하나 |
 
-### 6.1 GitHub 실행 검증 계획 (미실행)
+### 6.1 GitHub 실행 검증 순서
 
-각 Commit·Push는 사용자 승인 후 진행한다.
+각 Commit·Push와 GitHub 설정 변경은 사용자 승인 후 진행한다. **병합 전**에는 `pull_request` 트리거로만 CI를 검증한다. `push(main)`과 `workflow_dispatch`는 **최초 main 병합 후** 검증한다. `workflow_dispatch`는 기본 브랜치에 워크플로가 있어야 실행할 수 있기 때문이다(2장 트리거).
 
-1. Step 4 커밋 Push → PR 생성(사용자) → `backend-build` 성공, Artifact `test-reports`·`backend-war` 확인, wrapper 검증 로그 확인, CodeRabbit 자동 리뷰 확인
-2. 사용자가 5.4 Ruleset 적용 → Claude Code가 API로 규칙 확인
-3. 실패 테스트 커밋 Push → CI 실패, 로그에 실패 테스트 이름, `test-reports` 업로드, `backend-war` 미업로드 확인
-4. PR 병합 버튼 차단 확인(사용자 화면)
-5. 되돌리기 커밋 Push → 같은 PR에서 CI 성공 → 차단 해제 확인
-6. `workflow_dispatch` 1회 실행
-7. 사용자가 Squash Merge → main `push` CI 성공 확인
+완료된 항목:
+
+| 검증 | 결과 |
+| --- | --- |
+| PR #4 `pull_request` CI 첫 실행 | 성공 (6장 기록) |
+| CodeRabbit 첫 자동 리뷰 | 생성 확인, `COMMENTED` (6장 기록) |
+
+남은 순서:
+
+| # | 시점 | 단계 | 상태 |
+| --- | --- | --- | --- |
+| 1 | 병합 전 | CodeRabbit 지적(`workflow_dispatch` 검증 시점) 수정 | 이 문서에 반영 |
+| 2 | 병합 전 | 로컬 문서 검증(`git diff --check`) | 6장 기록 참고 |
+| 3 | 병합 전 | 수정 Commit·Push | 미실행 |
+| 4 | 병합 전 | 같은 PR #4에서 `backend-build` 재실행·성공 확인 | 미실행 |
+| 5 | 병합 전 | CodeRabbit 재리뷰, 지적 해소 확인 | 미실행 |
+| 6 | 병합 전 | 사용자가 5.4 Ruleset 적용(필수 체크는 `backend-build`만) → Claude Code가 API로 규칙 확인 | 미실행 |
+| 7 | 병합 전 | 의도적 실패 테스트 Commit·Push (Q5) | 미실행 |
+| 8 | 병합 전 | CI 실패, 로그의 실패 테스트 이름, `test-reports` 업로드·`backend-war` 미업로드, 병합 차단(사용자 화면) 확인 | 미실행 |
+| 9 | 병합 전 | 실패 테스트 되돌리기 Commit·Push | 미실행 |
+| 10 | 병합 전 | 같은 PR에서 CI 성공, 병합 차단 해제 확인 | 미실행 |
+| 11 | 병합 | 사용자가 Squash Merge (이때 처음으로 main에 워크플로가 생긴다) | 미실행 |
+| 12 | **최초 main 병합 후** | `push(main)` CI 실행·성공 확인 | 미실행 |
+| 13 | **최초 main 병합 후** | Actions 화면 `Run workflow`로 `workflow_dispatch` 수동 실행·성공 확인 (선행 조건: main에 `backend-ci.yml` 존재) | 미실행 |
+
+병합 후(12·13) 결과는 main에 직접 Push할 수 없으므로 후속 PR에서 이 문서에 기록한다.
+
+### 6.2 Step 4 완료 기준
+
+아래를 모두 실제로 확인해야 Step 4를 완료로 본다. 확인 증거(실행 링크, API 조회, 화면)가 없는 항목은 완료로 표시하지 않는다.
+
+- 병합 전: PR #4에서 `pull_request` CI 성공(6.1의 4·10), CodeRabbit 자동 리뷰 생성과 지적 해소(5), 실패 테스트 시 CI 실패·병합 차단(8), 복구 시 성공·차단 해제(10)
+- main 보호: Ruleset이 적용되고 필수 체크가 `backend-build` 하나다(6). CodeRabbit은 필수 조건이 아니다
+- 병합: Squash Merge로 병합된다(11)
+- 병합 후: `push(main)` CI 성공(12), `workflow_dispatch` 수동 실행 성공(13)
+- 테스트 3개 개별 결과와 wrapper 검증 로그: Actions 로그나 `test-reports` Artifact로 확인한 경우에만 완료로 기록한다
 
 ## 7. 미결·후속
 
@@ -188,3 +220,4 @@
 - AGENTS.md·CLAUDE.md 작성(Spring Boot 3.5.x / Framework 6.2.x 호환 API 우선 원칙 포함): 별도 단계
 - Action 버전 자동 갱신(Dependabot 등): 미정
 - CD(AWS·OIDC 등): Streaming Phase 4 이후 별도 단계
+- GitHub Actions Bot AI 리뷰(`github-actions[bot]` 명의 AI 리뷰)와 그 구현 방식인 Claude Code Review(`anthropics/claude-code-action`, `CLAUDE_CODE_OAUTH_TOKEN`): Step 4에서 제외. Agent Harness / Workflow 구축 단계에서 별도로 검토한다. 필요한 Actions 허용 목록 변경도 그때 정한다
