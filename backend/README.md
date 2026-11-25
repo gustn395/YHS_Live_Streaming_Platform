@@ -191,8 +191,8 @@ JSP 위치는 `app/src/main/webapp/WEB-INF/views/*.jsp`, taglib URI는 `jakarta.
 
 미결 (각 단계에서 결정):
 
-- 인증 방식(HttpSession / JWT): 저장소에 확정 정책 문서가 없다. Member 단계에서 결정.
-- DB 연동 테스트 방식(Testcontainers, Docker Compose 등): JPA 도입 단계에서 결정.
+- 인증 방식: [MB-U01](../docs/member/decisions.md#2-미결)
+- DB 연동 테스트 방식: [G-U01](../docs/policy.md#4-공통-미결)
 - Spring Boot 4.2+ 업그레이드 시점.
 
 ## 9. 결정 사항 (Step 3, 2026-11-24)
