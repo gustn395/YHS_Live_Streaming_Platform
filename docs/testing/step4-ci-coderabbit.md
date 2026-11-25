@@ -1,8 +1,8 @@
 # Step 4: GitHub Actions CI + CodeRabbit + main 보호
 
-- 브랜치: `feature/infra-github-actions-ci`
+- 브랜치: `feature/infra-github-actions-ci` → [PR #4](https://github.com/gustn395/YHS_Live_Streaming_Platform/pull/4), main에 Squash Merge(`9c1166e`)
 - 작성일: 2026-11-25
-- 상태: **PR #4에서 `pull_request` CI 성공, CodeRabbit 자동 리뷰 확인. Ruleset 적용, 실패·복구 검증, 병합 후 `push(main)`·`workflow_dispatch` 검증은 미실행** (5장 체크리스트, 6장 기록)
+- 상태: **구현·주요 검증 완료.** PR CI, CodeRabbit 자동 리뷰, Ruleset, 실패·복구 검증(Q5), Squash Merge, 병합 후 `push(main)`·`workflow_dispatch` 검증까지 확인 (6장 기록, 6.2 판정). 일부 세부 증거는 미확인이며 6.3에 모았다
 - 범위: CI만. AWS·ECR·EC2·Docker Compose 배포·GitHub OIDC·CD Workflow는 제외(Streaming Phase 4 실기능 구현과 최초 수동 AWS 배포 검증 이후 별도 단계)
 
 ## 1. 결정 사항
@@ -84,6 +84,22 @@
 | main 보호 | 없음 (`protected: false`, Ruleset 0개) |
 | Step 3 병합 | PR #3, Merge Commit 방식으로 병합됨 (`6bd371f`) |
 | Merge 방식 허용 설정, Actions 권한, CodeRabbit 설치 | 미확인 (5장에서 사용자가 확인) |
+
+### 4.1 적용 후 (2026-11-25 확인)
+
+비인증 API `GET /repos/<owner>/<repo>/rules/branches/main`, `GET /repos/<owner>/<repo>/rulesets/28061569`과 사용자 화면 확인으로 기록했다.
+
+| 항목 | 상태 | 근거 |
+| --- | --- | --- |
+| Ruleset | `main-protection`(id `28061569`), `enforcement: active`, 대상 `~DEFAULT_BRANCH`(main) | API |
+| 적용 규칙 | `deletion`, `non_fast_forward`, `required_linear_history`, `pull_request`, `required_status_checks` | API |
+| PR 규칙 | 필수 승인 0, 대화 해결 필수 끔(`required_review_thread_resolution: false`), 병합 방식 `squash`만 | API |
+| 필수 체크 | `backend-build` 하나(발신 앱 GitHub Actions, `integration_id: 15368`), strict 끔 | API |
+| Bypass 목록 | 비어 있음 | 사용자 화면 확인 (API는 관리자 전용 필드라 응답에 없음) |
+| 계획에 없던 값 | `require_extra_approval_for_unattributed_changes: true` | API 관측값. 의미·영향은 확인하지 못했다(설정 오류로 보지 않는다). PR #4는 CI 성공 후 병합할 수 있었다. 설정은 바꾸지 않았다 |
+| PR #4 head 브랜치 | 병합 후 원격에서 삭제됨 | `git ls-remote origin refs/heads/feature/infra-github-actions-ci` 결과 없음 |
+| 저장소 설정 `Automatically delete head branches` | 미확인 | 위 삭제가 이 설정에 의한 것인지 화면으로 확인하지 않았다. 6.3 참고 |
+| 저장소 Merge 방식 체크박스, Squash 기본 메시지, Actions 권한(5.1) | 미확인 | 비인증 API 응답에 필드가 없음. 6.3 참고 |
 
 ## 5. GitHub 웹 UI 설정 체크리스트 (사용자 수행)
 
@@ -172,37 +188,39 @@
 | 2026-11-25 | PR #4 `Backend CI` 첫 실행(`pull_request`, 커밋 `b324229`), 공개 GitHub API로 Job·단계·Artifact 조회 | `backend-build` 성공. 단계 7개(Checkout, JDK 17, Gradle 설정, Build and test, 리포트·WAR 업로드) 모두 성공. Artifact `test-reports`(12,359 B), `backend-war`(19,903,666 B, 실행 가능한 WAR) 생성. **테스트 3개 개별 결과와 wrapper 검증 로그는 미확인**(로그·Artifact 내용을 열어 보지 않음) |
 | 2026-11-25 | PR #4 CodeRabbit 자동 리뷰, 공개 GitHub API로 조회 | 요약 코멘트 1개, 리뷰 1건(상태 `COMMENTED`, 승인·변경 요청 아님), 인라인 지적 1개: 이 문서 6.1의 `workflow_dispatch` 검증을 최초 main 병합 뒤로 옮기라는 지적(Minor) → 6.1에 반영 |
 | 2026-11-25 | CodeRabbit 지적 반영 후 이 문서만 수정, `git diff --check` | 통과. 변경 파일은 이 문서 하나 |
+| 2026-11-25 | 수정 커밋 `b067249` Push 후 PR #4 CI 재실행 ([run 45571903051](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45571903051)), CodeRabbit 재리뷰 | `backend-build` 성공, Artifact `test-reports`(12,342 B)·`backend-war`(19,903,666 B). CodeRabbit "No actionable comments", 기존 지적에 "Addressed in commit b067249" 표시 |
+| 2026-11-25 | 사용자가 5.3·5.4 적용 → Ruleset을 비인증 API로 조회 | 계획대로 적용(4.1). PR #4 `mergeable_state: clean`(head `b067249`) |
+| 2026-11-25 | Q5 실패 테스트(`backend/app/src/test/java/com/yhs/livestreaming/ci/CiFailureVerificationTest.java`, `assertThat(1 + 1).isEqualTo(3)`) 추가 후 로컬 `./gradlew clean build --stacktrace` | 의도대로 실패. `:app:test`에서 4개 실행·1개 실패, 기존 3개 통과. `expected: 3 but was: 2`(테스트 결과 XML). 컴파일 오류 없음 |
+| 2026-11-25 18:03 | **Q5 기록 A — 실패 검증.** 커밋 `9e91d31` Push → [run 45581787360](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45581787360) (`pull_request`) | `failure`. 실패 단계 `Build and test`, 앞 단계는 모두 성공. 로그(사용자 전달): `CiFailureVerificationTest > intentionallyFailsToVerifyCiBlocksMerge() FAILED`, `AssertionFailedError at CiFailureVerificationTest.java:17`, `4 tests completed, 1 failed`, `Execution failed for task ':app:test'`. `test-reports` 업로드(파일 12개, 16,034 B), `Upload executable WAR` 건너뜀(`backend-war` 없음). 화면(사용자 확인): `backend-build` ✗, `Squash and merge` 비활성화. 비인증 API `mergeable_state`는 `unstable`(아래 행) |
+| 2026-11-25 | 기록 A 시점 공개 API와 화면 차이 | 비인증 `GET /pulls/4`는 `mergeable: true`, `mergeable_state: unstable`을 돌려줬지만 화면에서는 병합이 막혔다. 병합 차단 여부는 **화면 기준**으로 판단한다. `unstable`은 API 관측값으로만 기록하고, 원인은 확인하지 못했다 |
+| 2026-11-25 18:14 | **Q5 기록 B — 복구 검증.** `git revert --no-commit 9e91d31` → 커밋 `b7b6c54` Push → [run 45583570195](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45583570195) (`pull_request`) | 커밋은 임시 테스트 삭제 1건, `git diff b067249 HEAD` 비어 있음(트리 해시 같음). Run `success`, 모든 단계 성공. Artifact `test-reports`(12,349 B)·`backend-war`(19,903,666 B). check run `backend-build` 성공. `mergeable_state: clean`. CodeRabbit 체크 성공, 새 지적 0건. 실행된 테스트 건수는 미확인 |
+| 2026-11-25 18:18 | PR #4 Squash Merge (사용자) | main `9c1166e`, 부모 `6bd371f` 하나(단일 부모, Linear History 유지). `git diff b7b6c54 9c1166e` 비어 있음. 병합 전 main 대비 5개 파일(+361), 임시 테스트는 main에 없음. 원격 head 브랜치 삭제됨(설정 확인 여부는 4.1). 커밋 본문에는 PR 본문이 아니라 개별 커밋 메시지 4개가 들어갔다(6.3) |
+| 2026-11-25 | 병합 후 `push(main)` CI → [run 45584159610](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45584159610) | `success`, 모든 단계 성공. Artifact `test-reports`(12,339 B)·`backend-war`(19,903,666 B). 워크플로 `Backend CI`(id `429991382`) `active` |
+| 2026-11-25 | `workflow_dispatch` 수동 실행 (사용자가 Actions 화면 `Run workflow`) | 사용자 화면 확인: Run 성공, `backend-build` 성공, Gradle 9.9.2 `clean build` 성공, Artifact `backend-war`(19 MB)·`test-reports`(12.1 KB). **Run ID·실행 브랜치는 미확인**(공개 API 요청 한도 초과로 조회 실패) |
 
 ### 6.1 GitHub 실행 검증 순서
 
 각 Commit·Push와 GitHub 설정 변경은 사용자 승인 후 진행한다. **병합 전**에는 `pull_request` 트리거로만 CI를 검증한다. `push(main)`과 `workflow_dispatch`는 **최초 main 병합 후** 검증한다. `workflow_dispatch`는 기본 브랜치에 워크플로가 있어야 실행할 수 있기 때문이다(2장 트리거).
 
-완료된 항목:
-
-| 검증 | 결과 |
-| --- | --- |
-| PR #4 `pull_request` CI 첫 실행 | 성공 (6장 기록) |
-| CodeRabbit 첫 자동 리뷰 | 생성 확인, `COMMENTED` (6장 기록) |
-
-남은 순서:
+사전 단계: PR #4 `pull_request` CI 첫 실행 성공, CodeRabbit 첫 자동 리뷰(`COMMENTED`) 확인 (6장 기록).
 
 | # | 시점 | 단계 | 상태 |
 | --- | --- | --- | --- |
-| 1 | 병합 전 | CodeRabbit 지적(`workflow_dispatch` 검증 시점) 수정 | 이 문서에 반영 |
-| 2 | 병합 전 | 로컬 문서 검증(`git diff --check`) | 6장 기록 참고 |
-| 3 | 병합 전 | 수정 Commit·Push | 미실행 |
-| 4 | 병합 전 | 같은 PR #4에서 `backend-build` 재실행·성공 확인 | 미실행 |
-| 5 | 병합 전 | CodeRabbit 재리뷰, 지적 해소 확인 | 미실행 |
-| 6 | 병합 전 | 사용자가 5.4 Ruleset 적용(필수 체크는 `backend-build`만) → Claude Code가 API로 규칙 확인 | 미실행 |
-| 7 | 병합 전 | 의도적 실패 테스트 Commit·Push (Q5) | 미실행 |
-| 8 | 병합 전 | CI 실패, 로그의 실패 테스트 이름, `test-reports` 업로드·`backend-war` 미업로드, 병합 차단(사용자 화면) 확인 | 미실행 |
-| 9 | 병합 전 | 실패 테스트 되돌리기 Commit·Push | 미실행 |
-| 10 | 병합 전 | 같은 PR에서 CI 성공, 병합 차단 해제 확인 | 미실행 |
-| 11 | 병합 | 사용자가 Squash Merge (이때 처음으로 main에 워크플로가 생긴다) | 미실행 |
-| 12 | **최초 main 병합 후** | `push(main)` CI 실행·성공 확인 | 미실행 |
-| 13 | **최초 main 병합 후** | Actions 화면 `Run workflow`로 `workflow_dispatch` 수동 실행·성공 확인 (선행 조건: main에 `backend-ci.yml` 존재) | 미실행 |
+| 1 | 병합 전 | CodeRabbit 지적(`workflow_dispatch` 검증 시점) 수정 | 완료 |
+| 2 | 병합 전 | 로컬 문서 검증(`git diff --check`) | 완료 |
+| 3 | 병합 전 | 수정 Commit·Push | 완료 (`b067249`) |
+| 4 | 병합 전 | 같은 PR #4에서 `backend-build` 재실행·성공 확인 | 완료 (run 45571903051) |
+| 5 | 병합 전 | CodeRabbit 재리뷰, 지적 해소 확인 | 완료 (새 지적 0건) |
+| 6 | 병합 전 | 사용자가 5.4 Ruleset 적용(필수 체크는 `backend-build`만) → Claude Code가 API로 규칙 확인 | 완료 (4.1) |
+| 7 | 병합 전 | 의도적 실패 테스트 Commit·Push (Q5) | 완료 (`9e91d31`) |
+| 8 | 병합 전 | CI 실패, 로그의 실패 테스트 이름, `test-reports` 업로드·`backend-war` 미업로드, 병합 차단(사용자 화면) 확인 | 완료 (기록 A, run 45581787360) |
+| 9 | 병합 전 | 실패 테스트 되돌리기 Commit·Push | 완료 (`b7b6c54`) |
+| 10 | 병합 전 | 같은 PR에서 CI 성공, 병합 차단 해제 확인 | 완료 (기록 B, run 45583570195) |
+| 11 | 병합 | 사용자가 Squash Merge (이때 처음으로 main에 워크플로가 생긴다) | 완료 (`9c1166e`) |
+| 12 | **최초 main 병합 후** | `push(main)` CI 실행·성공 확인 | 완료 (run 45584159610) |
+| 13 | **최초 main 병합 후** | Actions 화면 `Run workflow`로 `workflow_dispatch` 수동 실행·성공 확인 (선행 조건: main에 `backend-ci.yml` 존재) | 완료 (사용자 화면 확인, Run ID 미확인) |
 
-병합 후(12·13) 결과는 main에 직접 Push할 수 없으므로 후속 PR에서 이 문서에 기록한다.
+병합 후(12·13) 결과는 main에 직접 Push할 수 없으므로 후속 PR에서 이 문서에 기록했다.
 
 ### 6.2 Step 4 완료 기준
 
@@ -213,6 +231,23 @@
 - 병합: Squash Merge로 병합된다(11)
 - 병합 후: `push(main)` CI 성공(12), `workflow_dispatch` 수동 실행 성공(13)
 - 테스트 3개 개별 결과와 wrapper 검증 로그: Actions 로그나 `test-reports` Artifact로 확인한 경우에만 완료로 기록한다
+
+판정 (2026-11-25): 병합 전·main 보호·병합·병합 후 기준을 실제로 확인해 **Step 4 구현과 주요 검증은 완료**로 본다. 마지막 기준(테스트 개별 결과, wrapper 검증 로그)은 일부만 확인했다. 테스트 건수는 기록 A의 로그(`4 tests completed, 1 failed`)로만 확인했고, 성공한 Run의 개별 결과와 wrapper 검증 로그는 6.3에 미확인으로 남긴다.
+
+### 6.3 미확인 항목
+
+추측으로 채우지 않는다. 확인하면 6장에 행을 추가한다.
+
+| 항목 | 이유 | 확인 방법 |
+| --- | --- | --- |
+| 성공한 Run(45571903051, 45583570195, 45584159610)의 테스트 3개 개별 결과 | Actions 로그·Artifact 내용은 인증이 필요 | Run의 `test-reports` Artifact → `backend/app/build/reports/tests/test/index.html` |
+| wrapper 검증(`validate-wrappers`) 로그 | 같음 | Run 로그의 `Set up Gradle` 단계 |
+| `workflow_dispatch` Run ID·실행 브랜치 | 공개 API 요청 한도 초과로 조회 실패 | Actions → Backend CI → 이벤트 `workflow_dispatch` 필터 |
+| 저장소 Merge 방식 체크박스, Squash 기본 메시지 | 비인증 API 응답에 필드 없음. `9c1166e`의 본문에 PR 본문이 아니라 개별 커밋 메시지 4개가 들어갔다. 설정 값 때문인지 병합 화면에서 메시지를 고친 것인지는 모른다 | `Settings → General → Pull Requests` |
+| `Automatically delete head branches` 설정 값 | 원격 브랜치 삭제는 확인했지만 설정 화면은 보지 않았다 | `Settings → General → Pull Requests` |
+| Actions 권한(5.1) 적용 여부 | 비인증 API로 볼 수 없음 | `Settings → Actions → General` |
+| `require_extra_approval_for_unattributed_changes: true`의 의미 | 4.1 참고 | GitHub 문서 또는 Ruleset 화면 |
+| 공개 API `mergeable_state`가 `unstable`이었던 이유 | 6장 기록 A 행 참고 | 인증된 API로 같은 조건 재현 시 확인 |
 
 ## 7. 미결·후속
 
