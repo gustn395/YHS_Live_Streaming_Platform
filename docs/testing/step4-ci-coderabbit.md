@@ -240,7 +240,7 @@
 
 | 항목 | 이유 | 확인 방법 |
 | --- | --- | --- |
-| 성공한 Run(45571903051, 45583570195, 45584159610)의 테스트 3개 개별 결과 | Actions 로그·Artifact 내용은 인증이 필요 | Run의 `test-reports` Artifact → `backend/app/build/reports/tests/test/index.html` |
+| 성공한 Run(45571903051, 45583570195, 45584159610)의 테스트 3개 개별 결과 | Actions 로그·Artifact 내용은 인증이 필요 | Run의 `test-reports` Artifact를 받아 압축을 푼 뒤 `app/build/reports/tests/test/index.html` (Artifact 루트가 `backend/`라 경로에 `backend/`가 붙지 않는다) |
 | wrapper 검증(`validate-wrappers`) 로그 | 같음 | Run 로그의 `Set up Gradle` 단계 |
 | `workflow_dispatch` Run ID·실행 브랜치 | 공개 API 요청 한도 초과로 조회 실패 | Actions → Backend CI → 이벤트 `workflow_dispatch` 필터 |
 | 저장소 Merge 방식 체크박스, Squash 기본 메시지 | 비인증 API 응답에 필드 없음. `9c1166e`의 본문에 PR 본문이 아니라 개별 커밋 메시지 4개가 들어갔다. 설정 값 때문인지 병합 화면에서 메시지를 고친 것인지는 모른다 | `Settings → General → Pull Requests` |
