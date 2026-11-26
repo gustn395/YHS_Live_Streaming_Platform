@@ -181,3 +181,24 @@ frontend 코드·의존성 변경 없음. Frontend CI가 실행할 명령(FE-T00
 | `npm audit --json` → `npm_audit_report.py --mode report` | npm exit 1, 판정 FOUND(moderate 9건, 비차단, FE-D015) |
 
 - GitHub Actions 실행(FE-T018 실검증)은 PR 이후다. 결과는 [fe02-ci-split.md](../testing/fe02-ci-split.md) 6장에 기록한다.
+
+**main 병합 뒤 재검증 (2026-11-26, `272c47a` = 구현 커밋 `5084d00` + `origin/main` `3b0f46a` merge)**
+
+| 명령 | 결과 |
+| --- | --- |
+| `npm ci` · `npm run lint` · `npm run typecheck` · `npm run build` | 모두 exit 0 |
+| `npm test` | exit 0, 17파일 218건 통과 |
+
+**FE-T018 GitHub Actions 실행 (PR #18)**
+
+공통 감지·Gate·Ruleset 결과와 Run 링크는 [fe02-ci-split.md](../testing/fe02-ci-split.md) 6장이 원본이다. 여기에는 Frontend 실행 결과만 적는다.
+
+| 실행 | Frontend 결과 | 근거 |
+| --- | --- | --- |
+| L3-1 `272c47a` | `frontend-build`(npm ci·lint·typecheck·test·build·audit 2단계) 성공, Artifact 없음, npm 캐시 저장 | 공개 API + 사용자 로그 |
+| L3-3 `97d9c68`(감지 FALLBACK) | `frontend-build` 성공. Node 24.22.3, npm 캐시 복원(49,302,846 B, 저장 키와 같음), 차단 audit PASS(전 심각도 0), 전체 audit FOUND(moderate 9, FE-D015) | 사용자 로그 |
+| L3-4b `7bf8907`(FE만 실패) | Vitest 5.1.0 17파일 중 1개·218건 중 1건 실패(`safeRedirect.test.ts > 허용: /app`, expected `/app-l3-4b` received `/app`), Build·차단 audit 건너뜀, 전체 audit 실행, `frontend-ci` FAILED | 사용자 화면·로그 + 공개 API |
+| L3-4b 원복 `f688b91` | Test·Build·audit 2단계·`Post Set up Node` 성공, `frontend-ci` `NORMAL (PASS)` | 사용자 화면 |
+
+- L3-1 실행의 audit 상세 Summary와 L3-2 원복 실행의 캐시 복원 로그는 미확인이다(같은 기능은 L3-3 실행에서 확인).
+- React Router `HydrateFallback` 경고와 Vitest 환경 생성 비용 안내는 L3-4b 실패와 무관하며 FE-02에서 고치지 않았다.

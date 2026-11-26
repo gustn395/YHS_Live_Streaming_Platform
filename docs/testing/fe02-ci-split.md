@@ -1,8 +1,10 @@
 # FE-02: Frontend CI 구축 + Backend·Frontend CI 독립성
 
-- Issue: #16 · 브랜치: `feature/16-frontend-ci-split` · 기준 커밋: `origin/main` `b236ffd`
+- Issue: #16 · PR: #18 · 브랜치: `feature/16-frontend-ci-split` · 기준 커밋: `origin/main` `b236ffd`(작업 중 `origin/main`
+  `3b0f46a`(#15)를 merge commit `272c47a`로 반영)
 - 작성일: 2026-11-26
-- 상태: **구현·로컬 검증(L1·L2) 완료, GitHub 검증(L3·L4) 전.** Ruleset 필수 체크는 아직 `backend-build`이다
+- 상태: **구현·L1·L2·L3 핵심 검증 완료, Ruleset 필수 체크 전환 완료(2026-11-26). Merge·L4 전.** L3 일부 상세 증거는
+  미확인(6장 6.2)
 - 범위: Backend·Frontend CI Workflow 분리, 변경 감지와 조건부 build, 최종 Gate, main Ruleset 필수 체크 전환과 검증.
   Frontend 전용 결정은 [frontend decisions.md](../frontend/decisions.md)(FE-D017·FE-D018), Frontend 전용 합격 기준은
   [frontend test-spec.md](../frontend/test-spec.md)(FE-T018)에 둔다. 기존 Backend CI 결정은 [Step 4 문서](step4-ci-coderabbit.md) 1장이 원본이다
@@ -170,4 +172,29 @@ GitHub 설정은 사용자가 웹 UI에서 한다(Step 4 Q6). Claude Code는 공
 | 2026-11-26 | FE-T001 명령·audit 판정(로컬) | [frontend regression-log](../frontend/regression-log.md) 2026-11-26 FE-02 절 |
 | 2026-11-26 | `backend/`에서 `.\gradlew.bat :app:build`(clean 없음, 기준 b236ffd + 작업 트리) | BUILD SUCCESSFUL, app 테스트 33건 통과(실패·오류·건너뜀 0) |
 | 2026-11-26 | 커밋 직전 태그 → 커밋 SHA 재확인(GitHub `git/ref/tags` API, annotated 태그는 tag 객체까지) | 5개 Action 모두 2.3·Step 4 2.1의 SHA와 같음 |
-| — | L3·L4·V1~V6, Ruleset 전환 | 미실행(PR 이후) |
+| 2026-11-26 | 병합 뒤 로컬 재검증(`272c47a` = `5084d00` + `3b0f46a` merge) | `run_tests` 96건 통과, FE-T001 exit 0(218건), `.\gradlew.bat :app:build`(clean 없음) app 테스트 72건 통과. 근거: 로컬 실행 |
+| 2026-11-26 | G1 Actions 허용 목록 | `actions/setup-node@*` 추가, 기존 4개·full-length commit SHA 강제 유지. 근거: 사용자 화면 |
+| 2026-11-26 | L3-1 첫 Push `272c47a` — [Backend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45835073376) · [Frontend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45835073596) | 6개 Job 성공, Gate 2개 `NORMAL (PASS)`(build 실제 실행, `reason=changed`), Artifact `backend-war` 70,732,594 B·`test-reports` 300,251 B 업로드, Frontend Artifact 없음, 로컬 action·SHA 강제 통과, npm 캐시 저장(`Cache saved with the key: node-cache-Linux-x64-npm-…`). 근거: 공개 API + 사용자 로그 |
+| 2026-11-26 | L3-2 unittest 실패 `f1306a5` — [Backend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45837401471) · [Frontend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45837401368) | 감지 Job 2개 FAILURE, build 2개 SKIPPED, Gate 2개 FAILURE. 관찰: 기존 Ruleset(필수 `backend-build`)에서 SKIPPED가 통과로 처리돼 Squash and merge가 활성 → Gate를 필수 체크로 바꾸는 근거. 근거: 사용자 화면 |
+| 2026-11-26 | L3-2 원복 `f6692c6` — [Backend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45837986377) · [Frontend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45837986429) | 6개 Job 성공으로 복구. 근거: 사용자 화면 |
+| 2026-11-26 | L3-3 감지 실패 `97d9c68` — [Backend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45838837023) · [Frontend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45838836755) | **PASS.** 양쪽 감지 로그: Python 3.12.3, unittest 96건 통과, `git merge-base` exit 128 `fatal: Not a valid commit name`, `mode=FALLBACK reason=git_error backend=run frontend=run`(경로 수 0). build 2개 실제 실행·성공, Gate 2개 `FALLBACK (PASS)`, CI Fallback warning 2건. 같은 실행의 `frontend-build`: Node 24.22.3, npm 캐시 hit·복원(49,302,846 B, 저장 키와 복원 키 같음) → **캐시 저장·복원 검증**, 차단 audit PASS(전 심각도 0)·전체 audit FOUND(moderate 9) → **FE-D017 동작 검증**. 근거: 사용자 로그 |
+| 2026-11-26 | L3-3 원복 `cd21e5e` — [Backend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45840865109) · [Frontend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45840865163) | 6개 Job 성공, Gate 2개 `NORMAL (PASS)`, 감지 Summary `mode=NORMAL reason=changed` run/run, 경로 수 backend 2·frontend 1·양쪽 12·생략 8(합계 23, 구현 커밋 23개 파일 분류와 같음). 근거: 사용자 화면 |
+| 2026-11-26 | G3~G5 Ruleset 전환(`main-protection`, id 28061569) | 사용자가 Export(저장소 밖 보관)·Bypass 비어 있음 확인 뒤 필수 체크를 `backend-ci`·`frontend-ci`(GitHub Actions, `integration_id` 15368)로 바꾸고 `backend-build` 제거. 전환 전·후 공개 API 비교: strict·`do_not_enforce_on_create` `false` 유지, 대상·enforcement·나머지 규칙(`deletion`·`non_fast_forward`·`required_linear_history`·`pull_request`) 같음, `updated_at` 2026-11-25T08:56:57Z → 2026-11-26T14:51:44Z. 근거: 사용자 화면 + 공개 API |
+| 2026-11-26 | L3-4a BE만 실패 `44c2b9b` — [Backend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45844025363) · [Frontend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45844025312) | **PASS.** `./gradlew clean build`에서 `:modules:global:test` 54건 중 1건 실패(`AuthenticatedMemberTest.keepsIdentityValues`, `:18`), BUILD FAILED. `backend-ci` `FAILED`("build 결과 failure(mode=NORMAL, reason=changed)", error annotation)·Required Failure, `frontend-ci` `NORMAL (PASS)`, Squash and merge 비활성. GitHub Artifact: `test-reports` 업로드(177KB), `backend-war` 미업로드(업로드 단계는 성공 때만 실행. Gradle 안의 WAR 생성 여부와 별개). 관찰: 공개 API `mergeable_state`는 `unstable`로 화면의 차단과 달라 판정 근거로 쓰지 않음. 근거: 사용자 화면·로그 + 공개 API |
+| 2026-11-27 | L3-4a 원복 `411dce1` — [Backend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45845240848) · [Frontend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45845240636) | 6개 Job 성공, Gate 2개 Required `NORMAL (PASS)`, GitHub Artifact `backend-war` 67.5MB·`test-reports` 293KB 업로드, Squash and merge 활성. 근거: 사용자 화면 |
+| 2026-11-27 | L3-4b FE만 실패 `7bf8907` — [Backend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45846180226) · [Frontend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45846180352) | **PASS.** Vitest 5.1.0 218건 중 1건 실패(`safeRedirect.test.ts > 허용: /app`), Build·차단 audit 건너뜀, 전체 audit은 실행. `frontend-ci` `FAILED`·Required Failure(error annotation), `backend-ci` `NORMAL (PASS)`, Backend GitHub Artifact `backend-war` 67.5MB·`test-reports` 294KB 정상 업로드, Squash and merge 비활성. 실패한 Job에서는 `Post Set up Node`(캐시 저장)가 건너뛰어짐. 근거: 사용자 화면·로그 + 공개 API |
+| 2026-11-27 | L3-4b 원복 `f688b91` — [Backend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45847907107) · [Frontend](https://github.com/gustn395/YHS_Live_Streaming_Platform/actions/runs/45847907114) | 6개 Job 성공, Gate 2개 Required `NORMAL (PASS)`, Artifact 업로드, Frontend Test·Build·audit 2단계·`Post Set up Node` 성공, Squash and merge 활성. CodeRabbit 리뷰 지적 0건. 근거: 사용자 화면 |
+| 2026-11-27 | 임시 실패 주입 원복 확인 | 원복 커밋 4개(`f6692c6`·`cd21e5e`·`411dce1`·`f688b91`) 모두 커밋 전 `git diff --cached <직전 정상 커밋>`이 비어 있음. 결과 기록 커밋 직전 `git diff 272c47a HEAD` 비어 있음. 근거: 로컬 실행 |
+| — | L4-0(push main·`workflow_dispatch`), V1~V6 | 미실행(Merge 뒤) |
+
+### 6.1 L3 판정
+
+L3 핵심 검증(Gate 2개 생성·판정, unittest 실패 FAILED, 감지 실패 FALLBACK, Ruleset 전환, BE만·FE만 실패의 독립성과 병합
+차단·해제, 임시 변경 원복)은 완료했다. 아래 상세 증거는 확인하지 못해 PASS로 소급하지 않는다.
+
+### 6.2 미확인 상세 증거
+
+- L3-1 실행(`272c47a`)의 변경 감지 Summary 전체와 npm audit 상세 Summary(같은 기능은 L3-3 실행에서 확인)
+- L3-2 실패 실행(`f1306a5`) Gate의 상세 실패 사유(Summary)
+- L3-2 원복 실행(`f6692c6`)의 npm 캐시 복원 로그(소요 시간만 약 60초 → 33초로 줄었음)
+- L3-3 원복 실행(`cd21e5e`)의 전체 Annotations 목록(화면에서 Fallback warning이 보이지 않음만 확인)
