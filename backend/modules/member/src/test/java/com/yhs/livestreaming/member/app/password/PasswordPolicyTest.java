@@ -63,4 +63,26 @@ class PasswordPolicyTest {
         assertThat(policy.check("yhslivestreaming2026", "tester01")).contains(PasswordViolation.CONTEXT_WORD);
         assertThat(policy.check("YHS Live Streaming!", "tester01")).contains(PasswordViolation.CONTEXT_WORD);
     }
+
+    @Test
+    void rejectsPasswordEqualToDigitsOnlyUsername() { // MB-D004: 핵심어가 빈 문자열이어도 username과 같으면 거부
+        String digits = "19736482051983647201";
+        assertThat(policy.check(digits, digits)).contains(PasswordViolation.CONTEXT_WORD);
+        assertThat(policy.check("1234_5678_9012_3", "1234_5678_9012_3")).contains(PasswordViolation.CONTEXT_WORD);
+    }
+
+    @Test
+    void rejectsReversedOrDecoratedDigitsOnlyUsername() { // MB-D005: username 파생어(뒤집기·기호 덧붙이기)
+        assertThat(policy.check("76543210987654321", "12345678901234567")).contains(PasswordViolation.CONTEXT_WORD);
+        assertThat(policy.check("12345678901234567!", "12345678901234567")).contains(PasswordViolation.CONTEXT_WORD);
+        assertThat(policy.check("98765432109876543", "12345678901234567")).isEmpty(); // 다른 숫자열은 허용
+    }
+
+    @Test
+    void stripsTrailingDigitsByCodePoint() { // U+1D7D9(보충 평면 숫자) 접미사도 숫자로 떼어 낸다
+        String supplementaryOne = new String(Character.toChars(0x1D7D9));
+        assertThat(policy.check("yhslivestreaming" + supplementaryOne, "tester01")).contains(PasswordViolation.CONTEXT_WORD);
+        assertThat(policy.check("yhslivestreaming" + supplementaryOne + "7", "tester01")).contains(PasswordViolation.CONTEXT_WORD);
+        assertThat(policy.check("yhslivestreaming2026", "tester01")).contains(PasswordViolation.CONTEXT_WORD); // ASCII 숫자
+    }
 }

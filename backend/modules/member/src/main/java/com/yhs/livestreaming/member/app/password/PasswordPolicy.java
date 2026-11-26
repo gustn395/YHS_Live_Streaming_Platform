@@ -12,7 +12,8 @@ import java.util.Set;
  *
  * <p>문맥 단어 판정: 비밀번호를 소문자로 바꾸고 글자·숫자만 남긴 뒤 끝의 숫자를 뗀 "핵심어"가 username이나 서비스 이름의
  * 핵심어와 같으면(앞뒤를 뒤집은 경우 포함) 거부한다. 예: {@code long_username_1!!!}, {@code yhslivestreaming2026}.
- * 비교는 비밀번호 전체를 기준으로 하며 부분 문자열로 찾지 않는다.
+ * 또 소문자·글자·숫자만 남긴 값(끝 숫자를 떼기 전)이 username과 같거나 뒤집어 같으면 거부한다(숫자·밑줄만인 username 대비).
+ * 비교는 비밀번호 전체를 기준으로 하며 부분 문자열로 찾지 않는다. 대소문자는 구분하지 않는다.
  */
 public class PasswordPolicy {
 
@@ -38,6 +39,16 @@ public class PasswordPolicy {
     }
 
     private static boolean isContextWord(String password, String username) {
+        String reversedPassword = new StringBuilder(password).reverse().toString();
+        // username과 같은 비밀번호(MB-D004)와 그 뒤집기·기호 덧붙이기(MB-D005): 끝 숫자를 떼기 전 값으로 비교해
+        // 숫자·밑줄만인 username(핵심어가 빈 문자열)도 잡는다
+        if (username != null) {
+            String usernameKey = alphanumeric(PasswordNormalization.nfc(username));
+            if (!usernameKey.isEmpty() && (usernameKey.equals(alphanumeric(password))
+                    || usernameKey.equals(alphanumeric(reversedPassword)))) {
+                return true;
+            }
+        }
         Set<String> contexts = new HashSet<>(SERVICE_WORDS);
         if (username != null) {
             String usernameCore = core(username);
@@ -46,21 +57,31 @@ public class PasswordPolicy {
             }
         }
         String forward = core(password);
-        String reversed = core(new StringBuilder(password).reverse().toString());
+        String reversed = core(reversedPassword);
         return (!forward.isEmpty() && contexts.contains(forward))
                 || (!reversed.isEmpty() && contexts.contains(reversed));
     }
 
-    /** 소문자 → 글자·숫자만 → 끝의 숫자 제거. */
+    /** 소문자 → 글자·숫자만 → 끝의 숫자(code point 단위, 보충 평면 숫자 포함) 제거. */
     static String core(String value) {
+        String letters = alphanumeric(value);
+        int end = letters.length();
+        while (end > 0) {
+            int codePoint = letters.codePointBefore(end);
+            if (!Character.isDigit(codePoint)) {
+                break;
+            }
+            end -= Character.charCount(codePoint);
+        }
+        return letters.substring(0, end);
+    }
+
+    /** 소문자 → 글자·숫자만. */
+    private static String alphanumeric(String value) {
         StringBuilder letters = new StringBuilder();
         value.toLowerCase(Locale.ROOT).codePoints()
                 .filter(Character::isLetterOrDigit)
                 .forEach(letters::appendCodePoint);
-        int end = letters.length();
-        while (end > 0 && Character.isDigit(letters.charAt(end - 1))) {
-            end--;
-        }
-        return letters.substring(0, end);
+        return letters.toString();
     }
 }

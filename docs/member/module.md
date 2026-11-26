@@ -25,7 +25,7 @@
 | `in` | `ApiV1AuthController`, `ApiV1AuthSpec`, `dto/SignupRequest`, `dto/SignupResponse`, `ValidSignupPassword`, `SignupPasswordValidator`, `MemberPublicEndpoints` | 회원가입 API. 검증 실패는 400 `errors[]`, 공개 경로 등록 |
 
 - 비밀번호 해시 포맷: `pbkdf2-sha256$v1$nfc$i=<반복 횟수>$k=<키 ID>$<Salt Base64>$<해시 Base64>`. Salt 16바이트(SecureRandom), PBKDF2 출력 256비트, 최종 HMAC-SHA256(pepper) 256비트, Base64는 패딩 없음. 검증은 `MessageDigest.isEqual`(일정 시간). 포맷 오류·키 ID 불일치는 불일치로 처리한다.
-- 비밀번호 정책: NFC 뒤 code point 15~64자. 문맥 단어 판정은 "소문자 → 글자·숫자만 → 끝 숫자 제거"한 핵심어가 username·서비스 이름(`yhslivestreaming`·`yhslive`·`livestreaming`·`yhs`)의 핵심어와 같으면(뒤집은 경우 포함) 거부한다.
+- 비밀번호 정책: NFC 뒤 code point 15~64자. 문맥 단어 판정은 "소문자 → 글자·숫자만 → 끝 숫자 제거"한 핵심어가 username·서비스 이름(`yhslivestreaming`·`yhslive`·`livestreaming`·`yhs`)의 핵심어와 같으면(뒤집은 경우 포함) 거부한다. 끝 숫자는 code point 단위로 뗀다. 또 글자·숫자만 남긴 값(끝 숫자를 떼기 전)이 username과 같거나 뒤집어 같으면 거부한다(숫자·밑줄만인 username 대비). 대소문자는 구분하지 않는다.
 - 설정: `member.password.pepper-key`·`pepper-key-id`(환경변수 `MEMBER_PASSWORD_PEPPER_KEY`·`_KEY_ID`, 기본값 없음), `iterations`(기본 600,000), `member.password.hibp.base-url`·`connect-timeout`·`read-timeout`(기본값은 `HibpProperties`, 정책 수치는 MB-D010). 키가 없거나 Base64가 아니거나 256비트가 아니면 기동에 실패한다.
 - 입력 정규화: username은 ASCII(`[A-Za-z0-9_]`)일 때만 소문자로 바꾼다(비ASCII가 소문자 변환으로 ASCII가 되는 우회 방지). 닉네임은 앞뒤 공백을 떼고 code point 2~20자, Unicode Cc·Cf(제어·서식 문자) 금지. 이메일은 앞뒤 공백 제거·소문자.
 - 로그: `logging.level.org.hibernate.orm.jdbc.error: OFF`(app `application.yml`). Hibernate 7이 SQL 오류 상세(`Key (email)=(...)`)를 남기는 카테고리다. 예외는 그대로 전파된다.
@@ -64,6 +64,6 @@
 
 | Method | 경로 | 접근 | 성공 | 오류 |
 | --- | --- | --- | --- | --- |
-| POST | `/api/v1/auth/signup` | 공개 | 201 `SignupResponse(memberId, accountStatus=PENDING)`, 토큰 없음 | 400 `COMMON_INVALID_INPUT` + `errors[]`, 409 `MEMBER_USERNAME_DUPLICATE`·`MEMBER_EMAIL_DUPLICATE` |
+| POST | `/api/v1/auth/signup` | 공개 | 201 `SignupResponse(memberId, accountStatus=PENDING)`, 토큰 없음 | 400 `COMMON_INVALID_INPUT` + `errors[]`, 400 `MEMBER_PASSWORD_BREACHED`(`errors[]` 없음), 409 `MEMBER_USERNAME_DUPLICATE`·`MEMBER_EMAIL_DUPLICATE`, 503 `MEMBER_PASSWORD_CHECK_UNAVAILABLE`(`errors[]` 없음, [MB-D010](decisions.md#1-확정-결정)) |
 
 - 요청·응답·오류 스키마의 원본은 `ApiV1AuthSpec`(Swagger)이고, 실제 응답과의 일치는 `SignupOpenApiIntegrationTest`·`SignupApiIntegrationTest`로 확인한다.

@@ -20,5 +20,11 @@
 | 2026-11-26 | `.\gradlew.bat :modules:member:test --tests "*HibpPwnedPasswordsClientTest" :app:test --tests "*SignupApiIntegrationTest" --continue` (S6 지적 회귀 테스트, 수정 전 RED) | member 16건 중 1 실패 | `invalidBaseUrlIsUnavailableWithoutLeak`: 요청 생성의 `IllegalArgumentException`이 밖으로 나감(의도) |
 | 2026-11-26 | `.\gradlew.bat :modules:member:test :app:test --continue` (S6 수정 후) | 성공(exit 0). member 54건(단위 46, 영속성 8), app 33건(member 14) 통과 | |
 | 2026-11-26 | `.\gradlew.bat :app:build` (Commit 직전, HIBP 반영) | 성공(exit 0). WAR 2개, `WEB-INF/lib`에 member·global JAR 포함, 차단 목록 리소스 없음. `:app:test` UP-TO-DATE(직전 통과) | |
+| 2026-11-26 | (실행 기록 아님) | 위 결과로 커밋 `b24c0c2`, Push | |
+| 2026-11-26 | `.\gradlew.bat :modules:member:test --tests "*PasswordPolicyTest" --tests "*HibpPwnedPasswordsClientTest" --continue` (CodeRabbit 지적 회귀 테스트, 수정 전 RED) | 29건 중 2 실패 | `rejectsPasswordEqualToDigitsOnlyUsername`, `stripsTrailingDigitsByCodePoint`(지적 재현). 리다이렉트·본문 정지 테스트는 통과(회귀 감시용) |
+| 2026-11-26 | `.\gradlew.bat :modules:member:test :app:test --continue` (CodeRabbit 반영 후) | 성공(exit 0). member 58건(단위 50, 영속성 8), app 33건 통과 | |
+| 2026-11-26 | `.\gradlew.bat :modules:member:test --tests "*PasswordPolicyTest" --tests "*HibpPwnedPasswordsClientTest" --continue` (재리뷰 지적 회귀 테스트, 수정 전 RED) | 30건 중 1 실패 | `rejectsReversedOrDecoratedDigitsOnlyUsername`. 본문 정지 테스트(하한 1,000ms·`timeout` 로그)는 통과 |
+| 2026-11-26 | `.\gradlew.bat :modules:member:test :app:test --continue` (재리뷰 반영 후) | 성공(exit 0). member 59건(단위 51, 영속성 8), app 33건 통과 | 결과 XML에 실제 HIBP 호출 흔적 없음 |
+| 2026-11-26 | `.\gradlew.bat :app:build` (Commit 직전, CodeRabbit 반영) | 성공(exit 0). `:app:test` UP-TO-DATE(직전 통과) | |
 
 - 미실행: 로컬 전체 `./gradlew clean build`(빌드 정책상 실행하지 않음).

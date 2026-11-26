@@ -14,6 +14,9 @@ import java.text.Normalizer;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -152,6 +155,69 @@ class HibpPwnedPasswordsClientTest {
         start(200, SUFFIX + ":1\r\n", 1_500);
 
         assertThat(client(Duration.ofMillis(300)).check(PASSWORD)).isEqualTo(Result.UNAVAILABLE);
+        assertNoLeak(output);
+    }
+
+    @Test
+    void reachableRedirectIsNotFollowed(CapturedOutput output) throws IOException { // MB-T015: Redirect.NEVER 회귀 검출
+        AtomicInteger targetHits = new AtomicInteger();
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/range/", exchange -> {
+            exchange.getResponseHeaders().add("Location", "/moved");
+            exchange.sendResponseHeaders(301, -1);
+            exchange.close();
+        });
+        server.createContext("/moved", exchange -> {
+            targetHits.incrementAndGet();
+            byte[] bytes = (SUFFIX + ":5\r\n").getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream out = exchange.getResponseBody()) {
+                out.write(bytes);
+            }
+        });
+        server.start();
+
+        assertThat(client(Duration.ofSeconds(2)).check(PASSWORD)).isEqualTo(Result.UNAVAILABLE);
+        assertThat(targetHits).hasValue(0);
+        assertNoLeak(output);
+    }
+
+    @Test
+    void stalledBodyAfterHeadersIsUnavailableWithinTotalLimit(CapturedOutput output) throws IOException { // MB-T015: 전체 상한
+        CountDownLatch release = new CountDownLatch(1);
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            byte[] first = (OTHER_SUFFIX + ":1\r\n").getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, first.length * 2L); // 본문을 다 보내지 않고 멈춘다
+            OutputStream out = exchange.getResponseBody();
+            out.write(first);
+            out.flush();
+            try {
+                release.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+            exchange.close();
+        });
+        server.start();
+        // 연결 제한을 크게 두어, 응답 제한(300ms)이 아니라 전체 상한(연결 + 응답 = 1,300ms)이 끊었음을 시간으로 구분한다
+        HibpPwnedPasswordsClient client = new HibpPwnedPasswordsClient(new HibpProperties(
+                URI.create("http://127.0.0.1:" + server.getAddress().getPort()),
+                Duration.ofMillis(1_000), Duration.ofMillis(300)));
+
+        Result result;
+        long elapsedMillis;
+        try {
+            long started = System.nanoTime();
+            result = client.check(PASSWORD);
+            elapsedMillis = (System.nanoTime() - started) / 1_000_000;
+        } finally {
+            release.countDown();
+        }
+
+        assertThat(result).isEqualTo(Result.UNAVAILABLE);
+        assertThat(elapsedMillis).isBetween(1_000L, 1_300L + 2_000L); // 전체 상한 근처(하한) + 허용 오차(상한)
+        assertThat(output.getAll()).contains("timeout");
         assertNoLeak(output);
     }
 
