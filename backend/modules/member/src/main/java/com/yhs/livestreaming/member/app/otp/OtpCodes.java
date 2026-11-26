@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.Locale;
 import java.util.function.IntSupplier;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -37,7 +38,8 @@ public class OtpCodes {
         if (value < 0 || value >= BOUND) {
             throw new IllegalStateException("OTP 범위 밖 값");
         }
-        return String.format("%04d", value);
+        // Locale.ROOT: 기본 로케일이 다른 숫자 체계(예: 태국 숫자)여도 ASCII 0~9로 만든다
+        return String.format(Locale.ROOT, "%04d", value);
     }
 
     /** 검증용 HMAC: challengeId·version·code에 묶인다. */

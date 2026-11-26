@@ -39,7 +39,7 @@
 - 입력 정규화: username은 ASCII(`[A-Za-z0-9_]`)일 때만 소문자로 바꾼다(비ASCII가 소문자 변환으로 ASCII가 되는 우회 방지). 닉네임은 앞뒤 공백을 떼고 code point 2~20자, Unicode Cc·Cf(제어·서식 문자) 금지. 이메일은 앞뒤 공백 제거·소문자.
 - 로그: `logging.level.org.hibernate.orm.jdbc.error: OFF`(app `application.yml`). Hibernate 7이 SQL 오류 상세(`Key (email)=(...)`)를 남기는 카테고리다. 예외는 그대로 전파된다.
 - 비밀번호 원문 보호: `SignupRequest`·`SignupCommand`·`MemberPasswordProperties`의 `toString()`은 비밀번호·키를 가린다. 오류 응답은 필드와 고정 문구만 내보낸다.
-- 테스트: 단위(인프라 없음, HIBP는 JDK `HttpServer` 스텁, 로그인·OTP 서비스는 대역), 영속성(Testcontainers PostgreSQL + Flyway, `@DataJpaTest`), Redis 어댑터(Testcontainers Redis 싱글턴 + `@DataRedisTest`), SMTP 어댑터(Testcontainers Mailpit, 연결 거부·응답 없는 소켓), app 통합(`SignupApiIntegrationTest`, `SignupOpenApiIntegrationTest`, `LoginApiIntegrationTest`, `RedisUnavailableIntegrationTest`, `AuthOpenApiIntegrationTest`. HIBP는 `StubBreachedPasswordChecker`, 메일은 `CapturingOtpMailSender` 대역). 실제 HIBP·Gmail은 부르지 않는다. 건수는 [test-spec.md](test-spec.md) 2장.
+- 테스트: 단위(인프라 없음, HIBP는 JDK `HttpServer` 스텁, 로그인·OTP 서비스는 대역), 영속성(Testcontainers PostgreSQL + Flyway, `@DataJpaTest`), Redis 어댑터(Testcontainers Redis 싱글턴 + `@DataRedisTest`), SMTP 어댑터(Testcontainers Mailpit, 연결 거부·응답 없는 소켓), app 통합(`SignupApiIntegrationTest`, `SignupOpenApiIntegrationTest`, `LoginApiIntegrationTest`, `RedisUnavailableIntegrationTest`, `AuthStoreFailureIntegrationTest`, `AuthOpenApiIntegrationTest`. CSRF는 실제 발급 토큰(`testsupport.RealCsrf`)을 쓴다. HIBP는 `StubBreachedPasswordChecker`, 메일은 `CapturingOtpMailSender` 대역). 실제 HIBP·Gmail은 부르지 않는다. 건수는 [test-spec.md](test-spec.md) 2장.
 
 ### 로그인·OTP (BE-03)
 
@@ -52,7 +52,7 @@
 - 로그인 완료(`LoginCompletionService`): Challenge 소비 뒤 회원 재조회(없음·PENDING 만료 401, DISABLED 403) → PENDING이면 조건부 활성화(0행이면 재조회해 ACTIVE일 때만 계속) → Session ID·Refresh 생성 → Access 서명 → `session_create.lua`(충돌이면 새 값으로 1회 더) → 쿠키·CSRF 갱신. Challenge 쿠키는 OTP 확인 직후(완료 처리 전) 지운다. 그래서 완료 처리가 401·403·503으로 끝나도 쓸모없는 Challenge 쿠키가 남지 않는다. Redis 어댑터의 만료 판단은 주입한 `Clock`을 쓴다. 중간 실패 때 남는 상태: Challenge 소비됨(다시 로그인), 활성화는 OTP로 이메일 소유가 확인된 뒤라 유지, 응답 전송 실패 시 세션은 클라이언트가 모르는 채 7일 TTL로 사라짐.
 - 오류 코드: `AUTH_LOGIN_FAILED`(401), `AUTH_LOGIN_TEMPORARILY_BLOCKED`(429), `MEMBER_ACCOUNT_DISABLED`(403), `AUTH_OTP_MISMATCH`·`AUTH_OTP_EXPIRED`·`AUTH_OTP_CHALLENGE_INVALID`(401), `AUTH_OTP_RATE_LIMITED`(429), `MEMBER_OTP_DELIVERY_UNAVAILABLE`(503). 429는 모두 `Retry-After`.
 - 클라이언트 IP: `getRemoteAddr()`만(MB-D018, MB-U06).
-- 설정: `member.otp.hmac-key`·`hmac-key-id`(환경변수 `MEMBER_OTP_HMAC_KEY`·`_ID`, 기본값 없음), `member.otp.mail.from`(`MEMBER_OTP_MAIL_FROM`), `member.limits.*`(기본값 = 정책 값), `spring.mail.*`(호스트·계정은 환경변수, SMTP 인증·STARTTLS 플래그는 기본값 없는 `MEMBER_SMTP_AUTH`·`MEMBER_SMTP_STARTTLS`). 메일 health는 끈다(app `application.yml`).
+- 설정: `member.otp.hmac-key`·`hmac-key-id`(환경변수 `MEMBER_OTP_HMAC_KEY`·`_ID`, 기본값 없음), `member.otp.mail.from`(`MEMBER_OTP_MAIL_FROM`), `member.limits.*`(기본값 = 정책 값. 범위별로 일부만 설정하면 비운 `max`·기간은 그 범위의 기본값, `max` 1 미만이면 기동 실패), `spring.mail.*`(호스트·계정은 환경변수, SMTP 인증·STARTTLS 플래그는 기본값 없는 `MEMBER_SMTP_AUTH`·`MEMBER_SMTP_STARTTLS`). 메일 health는 끈다(app `application.yml`).
 
 ### Redis 키·Lua
 

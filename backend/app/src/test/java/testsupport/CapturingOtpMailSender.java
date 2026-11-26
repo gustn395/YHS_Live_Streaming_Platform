@@ -13,11 +13,13 @@ public class CapturingOtpMailSender implements OtpMailSender {
 
     private final List<SentOtp> sent = new ArrayList<>();
     private volatile boolean failing;
+    private volatile String lastFailedCode;
 
     @Override
     public synchronized void send(String email, String code, Instant expiresAt) {
         if (failing) {
-            throw new IllegalStateException("smtp unavailable for " + email + " code " + code);
+            lastFailedCode = code;
+            throw new IllegalStateException(FAILURE_MESSAGE_PREFIX + email + " code " + code);
         }
         sent.add(new SentOtp(email, code, expiresAt));
     }
@@ -39,8 +41,17 @@ public class CapturingOtpMailSender implements OtpMailSender {
         this.failing = failing;
     }
 
+    /** 실패로 흉내 낸 마지막 발송의 OTP(예외 메시지에 넣은 값). */
+    public String lastFailedCode() {
+        return lastFailedCode;
+    }
+
+    /** 실패할 때 던지는 예외 메시지 앞부분(응답·로그에 새지 않아야 하는 원문 오류). */
+    public static final String FAILURE_MESSAGE_PREFIX = "smtp unavailable for ";
+
     public synchronized void reset() {
         sent.clear();
         failing = false;
+        lastFailedCode = null;
     }
 }

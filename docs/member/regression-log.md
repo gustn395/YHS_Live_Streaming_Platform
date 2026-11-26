@@ -36,6 +36,10 @@
 | 2026-11-26 | `.\gradlew.bat :modules:member:compileTestJava` (S6·S10 후 추가 확인: 발송 미확인 OTP 검증·실패 메일 숫자 재사용 회귀 테스트 먼저) | 컴파일 실패 10건(의도) | `confirmDelivered`·`recentDigests` 없음. 코드 확인으로 결함 재현: 재발송 OTP가 저장 즉시 검증 가능, 실패 메일 숫자의 지문을 복원으로 지움 |
 | 2026-11-26 | `.\gradlew.bat :modules:member:test :app:test --continue` (수정 후) | 성공(exit 0). member 157(단위 95, 영속성 11, Redis 48, SMTP 3), app 69 통과 | |
 | 2026-11-26 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun :app:build --continue` (⑤ 직전 최종 S5 + Commit 직전 App build) | 성공(exit 0). global 54, member 157, app 69 통과, 건너뜀 0. WAR 2개(실행 가능·plain), `WEB-INF/lib`에 member·global JAR, `spring-security-oauth2-jose-7.1.3`·`nimbus-jose-jwt-10.9.1`·`spring-data-redis-4.1.3`·`angus-mail-2.0.5` 포함 | clean·전체 build 미실행(빌드 정책) |
+| 2026-11-26 | (#13 Phase 5, CodeRabbit) `.\gradlew.bat :modules:member:test --tests "*MemberLimitPropertiesTest" --tests "*OtpServiceTest"` (지적 회귀 테스트 먼저) | 2건 실패(의도) | `max`만 설정하면 `window=null`, 태국 숫자 로케일에서 OTP가 `๐๐๔๒` |
+| 2026-11-26 | `.\gradlew.bat :modules:member:test` / `:app:test --continue` (CodeRabbit 반영 후) | 성공(exit 0). member 161, app 72 통과 | 테스트 보강: 쿠키 Max-Age 범위, 응답 JSON 필드 단위 비노출, 메일 실패 원문 비노출, 소진 안내, 동시 OTP 확인, 부분 저장소 장애, 실제 CSRF 토큰, PEXPIRETIME, 연결 팩터리 정리 |
+| 2026-11-26 | (Phase 5 S6 재리뷰·Q2) `.\gradlew.bat :modules:member:test --tests "*MemberLimitPropertiesTest"` (빠진 max 회귀 테스트 먼저) | 2건 실패(의도) | 기간만 설정하면 `max=0`, `max=0`이 기동됨 |
+| 2026-11-26 | `.\gradlew.bat :modules:member:test --tests "*MemberLimitPropertiesTest" --tests "*RedisRequestRateLimiterTest"` (수정 후) | 성공. 5건, 7건 통과 | 재리뷰 수정(테스트 카운터 원자화·초기화, 동시성 테스트 타임아웃, 테스트 이름)은 직전 전체 재실행에서 통과 |
 | 2026-11-26 | (수동 확인) 개발 브라우저 `__Host-`·Secure 쿠키 동작 | 미실행 | MB-D013 확인 항목. 자동 테스트와 별도로 기록한다 |
 
 - 미실행: 로컬 전체 `./gradlew clean build`(빌드 정책상 실행하지 않음).

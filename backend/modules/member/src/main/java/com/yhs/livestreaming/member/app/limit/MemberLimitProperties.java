@@ -12,12 +12,26 @@ public record MemberLimitProperties(Window signup, Window login, Window otp, Log
                                     OtpIssue otpIssue) {
 
     public MemberLimitProperties {
-        signup = signup != null ? signup : new Window(5, Duration.ofHours(1));
-        login = login != null ? login : new Window(30, Duration.ofMinutes(10));
-        otp = otp != null ? otp : new Window(30, Duration.ofMinutes(10));
+        // 범위별 설정 객체가 없으면 기본값, 있으면 비운 max·기간만 그 범위의 기본값으로 채운다(설정한 값은 유지)
+        signup = withDefaults(signup, new Window(5, Duration.ofHours(1)));
+        login = withDefaults(login, new Window(30, Duration.ofMinutes(10)));
+        otp = withDefaults(otp, new Window(30, Duration.ofMinutes(10)));
         loginFailure = loginFailure != null ? loginFailure
                 : new LoginFailure(10, Duration.ofHours(24), Duration.ofMinutes(15));
         otpIssue = otpIssue != null ? otpIssue : new OtpIssue(Duration.ofSeconds(60), 5, 20, 10, 5);
+    }
+
+    /** 비운 값(max·기간)만 그 범위의 기본값으로 채운다. 설정한 max가 1 미만이면 기동에 실패한다(전부 차단 방지). */
+    private static Window withDefaults(Window configured, Window defaults) {
+        if (configured == null) {
+            return defaults;
+        }
+        Integer max = configured.max() != null ? configured.max() : defaults.max();
+        if (max < 1) {
+            throw new IllegalArgumentException("member.limits.*.max는 1 이상이어야 한다");
+        }
+        Duration window = configured.window() != null ? configured.window() : defaults.window();
+        return new Window(max, window);
     }
 
     public static MemberLimitProperties defaults() {
@@ -32,8 +46,11 @@ public record MemberLimitProperties(Window signup, Window login, Window otp, Log
         };
     }
 
-    /** IP 기준 고정 창: 창 안에서 {@code max}번까지 허용. */
-    public record Window(int max, Duration window) {
+    /**
+     * IP 기준 고정 창: 창 안에서 {@code max}번까지 허용. {@code max}는 설정에서 빠질 수 있도록 {@link Integer}다(빠지면 0으로
+     * 바인딩되어 전부 차단되는 일을 막고 기본값을 채운다).
+     */
+    public record Window(Integer max, Duration window) {
     }
 
     /** 로그인 실패: 연속 {@code maxFailures}번째 실패에 {@code block} 동안 차단, 카운터는 마지막 실패 + {@code counterTtl}. */

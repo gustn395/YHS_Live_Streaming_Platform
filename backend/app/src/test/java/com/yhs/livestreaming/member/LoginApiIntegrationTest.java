@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.yhs.livestreaming.global.auth.AuthCookieNames;
+import com.yhs.livestreaming.member.app.MemberErrorCode;
 import com.yhs.livestreaming.member.in.MemberAuthCookies;
 import com.yhs.livestreaming.member.app.password.MemberPasswordProperties;
 import com.yhs.livestreaming.member.app.password.Pbkdf2PasswordHasher;
@@ -38,6 +40,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import testsupport.AppIntegrationTest;
 import testsupport.CapturingOtpMailSender;
+import testsupport.RealCsrf;
 import testsupport.SecurityTestEndpoints;
 
 /**
@@ -71,25 +74,11 @@ class LoginApiIntegrationTest {
 
     @BeforeEach
     void issueCsrfToken() throws Exception {
-        csrfToken = mockMvc.perform(get("/api/v1/auth/csrf")).andReturn().getResponse()
-                .getCookie("XSRF-TOKEN").getValue();
+        csrfToken = RealCsrf.issue(mockMvc);
     }
 
     private RequestPostProcessor realCsrf() {
-        return request -> {
-            request.setCookies(appendCookie(request.getCookies(), new Cookie("XSRF-TOKEN", csrfToken)));
-            request.addHeader("X-XSRF-TOKEN", csrfToken);
-            return request;
-        };
-    }
-
-    private static Cookie[] appendCookie(Cookie[] existing, Cookie added) {
-        if (existing == null) {
-            return new Cookie[] {added};
-        }
-        Cookie[] all = java.util.Arrays.copyOf(existing, existing.length + 1);
-        all[existing.length] = added;
-        return all;
+        return RealCsrf.token(csrfToken);
     }
 
     @AfterEach
@@ -111,8 +100,9 @@ class LoginApiIntegrationTest {
                 .andReturn().getResponse();
 
         assertThat(setCookie(response, MemberAuthCookies.OTP_CHALLENGE))
-                .contains("Path=/").contains("Max-Age=600").contains("Secure").contains("HttpOnly")
+                .contains("Path=/").contains("Secure").contains("HttpOnly")
                 .contains("SameSite=Strict").doesNotContain("Domain=");
+        assertThat(maxAge(response, MemberAuthCookies.OTP_CHALLENGE)).isBetween(600L - MAX_AGE_SLACK, 600L);
         assertThat(response.getHeaders("Set-Cookie"))
                 .noneMatch(value -> value.startsWith(AuthCookieNames.ACCESS_TOKEN))
                 .noneMatch(value -> value.startsWith(MemberAuthCookies.REFRESH_TOKEN));
@@ -135,10 +125,12 @@ class LoginApiIntegrationTest {
                 .andExpect(jsonPath("$.accessTokenExpiresAt").isNotEmpty())
                 .andReturn().getResponse();
 
-        assertThat(setCookie(response, AuthCookieNames.ACCESS_TOKEN)).contains("Path=/").contains("Max-Age=900")
+        assertThat(setCookie(response, AuthCookieNames.ACCESS_TOKEN)).contains("Path=/")
                 .contains("HttpOnly").contains("Secure").contains("SameSite=Strict").doesNotContain("Domain=");
+        assertThat(maxAge(response, AuthCookieNames.ACCESS_TOKEN)).isBetween(900L - MAX_AGE_SLACK, 900L);
         assertThat(setCookie(response, MemberAuthCookies.REFRESH_TOKEN)).contains("Path=/api/v1/auth")
-                .contains("Max-Age=604800").contains("HttpOnly").contains("Secure").contains("SameSite=Strict");
+                .contains("HttpOnly").contains("Secure").contains("SameSite=Strict");
+        assertThat(maxAge(response, MemberAuthCookies.REFRESH_TOKEN)).isBetween(604800L - MAX_AGE_SLACK, 604800L);
         assertThat(setCookie(response, MemberAuthCookies.OTP_CHALLENGE)).contains("Max-Age=0").contains("Path=/");
         Cookie renewedCsrf = response.getCookie("XSRF-TOKEN");
         assertThat(renewedCsrf).isNotNull();
@@ -151,7 +143,8 @@ class LoginApiIntegrationTest {
         String refresh = response.getCookie(MemberAuthCookies.REFRESH_TOKEN).getValue();
         assertThat(redis.keys("auth:refresh:*")).containsExactly("auth:refresh:" + sha256(refresh));
         mockMvc.perform(get("/test/protected/me").cookie(response.getCookie(AuthCookieNames.ACCESS_TOKEN)))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(content().string(Long.toString(memberId)));
     }
 
     @Test
@@ -167,6 +160,38 @@ class LoginApiIntegrationTest {
     }
 
     @Test
+    void concurrentVerificationsOfOneChallengeLetOnlyOneSucceed() throws Exception { // MB-T022
+        signup("tester01", EMAIL);
+        Cookie challenge = challengeCookie(login("tester01", PASSWORD).andReturn());
+        String code = mail.lastCodeFor(EMAIL);
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            List<java.util.concurrent.Future<MockHttpServletResponse>> futures = new java.util.ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                futures.add(pool.submit(() -> {
+                    assertThat(start.await(30, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                    return mockMvc.perform(verify(challenge, code)).andReturn().getResponse();
+                }));
+            }
+            start.countDown();
+            List<MockHttpServletResponse> responses = new java.util.ArrayList<>();
+            for (java.util.concurrent.Future<MockHttpServletResponse> future : futures) {
+                responses.add(future.get(30, java.util.concurrent.TimeUnit.SECONDS)); // 교착 시 빌드가 멈추지 않게
+            }
+
+            assertThat(responses).extracting(MockHttpServletResponse::getStatus).containsExactlyInAnyOrder(200, 401);
+            assertThat(responses).filteredOn(r -> r.getStatus() == 401).singleElement()
+                    .satisfies(r -> assertThat(r.getContentAsString(StandardCharsets.UTF_8))
+                            .contains("AUTH_OTP_CHALLENGE_INVALID"));
+            assertThat(responses).filteredOn(r -> r.getCookie(AuthCookieNames.ACCESS_TOKEN) != null).hasSize(1);
+            assertThat(redis.keys("auth:session:*")).hasSize(1);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
     void wrongOtpFiveTimesExhaustsTheOtp() throws Exception { // MB-T023
         signup("tester01", EMAIL);
         Cookie challenge = challengeCookie(login("tester01", PASSWORD).andReturn());
@@ -178,7 +203,9 @@ class LoginApiIntegrationTest {
                     .andExpect(jsonPath("$.code").value("AUTH_OTP_MISMATCH"));
         }
         mockMvc.perform(verify(challenge, wrong))
-                .andExpect(jsonPath("$.code").value("AUTH_OTP_EXPIRED"));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_OTP_EXPIRED"))
+                .andExpect(jsonPath("$.detail").value(MemberErrorCode.OTP_EXHAUSTED_DETAIL));
 
         mockMvc.perform(verify(challenge, code))
                 .andExpect(status().isUnauthorized())
@@ -285,7 +312,7 @@ class LoginApiIntegrationTest {
     }
 
     @Test
-    void mailFailureDuringLoginIsServiceUnavailableWithoutChallenge() throws Exception { // MB-T026
+    void mailFailureDuringLoginIsServiceUnavailableWithoutChallenge(CapturedOutput output) throws Exception { // MB-T026
         signup("tester01", EMAIL);
         mail.failing(true);
 
@@ -296,6 +323,14 @@ class LoginApiIntegrationTest {
 
         assertThat(response.getHeaders("Set-Cookie")).noneMatch(value -> value.startsWith("__Host-"));
         assertThat(redis.keys("auth:otp:challenge:*")).isEmpty();
+        // 대역이 던진 예외 메시지("smtp unavailable for <이메일> code <OTP>")가 응답·로그로 새지 않는다
+        String failedCode = mail.lastFailedCode();
+        assertThat(failedCode).matches("[0-9]{4}");
+        String body = response.getContentAsString(StandardCharsets.UTF_8);
+        assertThat(body).doesNotContain(EMAIL).doesNotContain(CapturingOtpMailSender.FAILURE_MESSAGE_PREFIX)
+                .doesNotContain("code " + failedCode);
+        assertThat(output.getAll()).doesNotContain(EMAIL).doesNotContain(CapturingOtpMailSender.FAILURE_MESSAGE_PREFIX)
+                .doesNotContain("code " + failedCode);
     }
 
     @Test
@@ -368,7 +403,11 @@ class LoginApiIntegrationTest {
         String access = response.getCookie(AuthCookieNames.ACCESS_TOKEN).getValue();
         String refresh = response.getCookie(MemberAuthCookies.REFRESH_TOKEN).getValue();
 
-        assertThat(body).doesNotContain(access).doesNotContain(refresh).doesNotContain(code);
+        Map<String, Object> json = com.jayway.jsonpath.JsonPath.parse(body).read("$");
+        assertThat(json).containsOnlyKeys("memberId", "role", "accessTokenExpiresAt");
+        assertThat(json.values()).map(String::valueOf)
+                .noneMatch(value -> value.equals(code) || value.equals(access) || value.equals(refresh)
+                        || value.equals(challenge.getValue()) || value.equals(PASSWORD));
         assertThat(output).doesNotContain(PASSWORD).doesNotContain(access).doesNotContain(refresh)
                 .doesNotContain(challenge.getValue()).doesNotContain("code " + code);
     }
@@ -412,6 +451,16 @@ class LoginApiIntegrationTest {
         List<String> headers = response.getHeaders("Set-Cookie");
         return headers.stream().filter(value -> value.startsWith(name + "=")).findFirst()
                 .orElseThrow(() -> new AssertionError("Set-Cookie 없음: " + name));
+    }
+
+    /** 발급 시각과 쿠키를 쓰는 시각 사이에 흐를 수 있는 시간(초). Max-Age는 남은 시간을 올림한 값이다. */
+    private static final long MAX_AGE_SLACK = 10;
+
+    private static long maxAge(MockHttpServletResponse response, String name) {
+        String header = setCookie(response, name);
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("Max-Age=(\\d+)").matcher(header);
+        assertThat(matcher.find()).as("Max-Age: " + name).isTrue();
+        return Long.parseLong(matcher.group(1));
     }
 
     private static String withoutInstance(String body) {

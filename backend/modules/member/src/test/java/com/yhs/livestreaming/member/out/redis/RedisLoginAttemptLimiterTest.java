@@ -137,12 +137,14 @@ class RedisLoginAttemptLimiterTest extends RedisTestSupport {
 
     @Test
     void unreachableRedisIsStoreUnavailable() {
-        RedisLoginAttemptLimiter broken = new RedisLoginAttemptLimiter(
-                RedisLoginSessionStoreTest.unreachableRedis(), MemberLimitProperties.defaults());
+        try (RedisLoginSessionStoreTest.UnreachableRedis unreachable = RedisLoginSessionStoreTest.unreachableRedis()) {
+            RedisLoginAttemptLimiter broken = new RedisLoginAttemptLimiter(unreachable.template(),
+                    MemberLimitProperties.defaults());
 
-        assertThatThrownBy(() -> broken.blockedFor("tester01"))
-                .isInstanceOf(LoginSessionStoreUnavailableException.class);
-        assertThatThrownBy(() -> broken.recordFailure("tester01"))
-                .isInstanceOf(LoginSessionStoreUnavailableException.class);
+            assertThatThrownBy(() -> broken.blockedFor("tester01"))
+                    .isInstanceOf(LoginSessionStoreUnavailableException.class);
+            assertThatThrownBy(() -> broken.recordFailure("tester01"))
+                    .isInstanceOf(LoginSessionStoreUnavailableException.class);
+        }
     }
 }

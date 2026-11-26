@@ -48,8 +48,9 @@ class RedisLoginSessionStoreTest extends RedisTestSupport {
         Map<Object, Object> refresh = redisTemplate.opsForHash().entries(REFRESH_KEY);
         assertThat(refresh).containsEntry("sid", SID).containsEntry("memberId", "42")
                 .containsEntry("expiresAt", Long.toString(expiresAt.toEpochMilli()));
-        assertThat(absoluteExpiry(SESSION_KEY)).isCloseTo(expiresAt.toEpochMilli(), org.assertj.core.data.Offset.offset(2_000L));
-        assertThat(absoluteExpiry(REFRESH_KEY)).isCloseTo(expiresAt.toEpochMilli(), org.assertj.core.data.Offset.offset(2_000L));
+        // PEXPIRETIME(Redis 7.0+): 저장한 절대 만료 시각(ms)을 그대로 돌려준다
+        assertThat(absoluteExpiry(SESSION_KEY)).isEqualTo(expiresAt.toEpochMilli());
+        assertThat(absoluteExpiry(REFRESH_KEY)).isEqualTo(expiresAt.toEpochMilli());
     }
 
     @Test
@@ -101,26 +102,37 @@ class RedisLoginSessionStoreTest extends RedisTestSupport {
 
     @Test
     void unreachableRedisIsReportedAsStoreUnavailable() {
-        RedisLoginSessionStore broken = new RedisLoginSessionStore(unreachableRedis(), java.time.Clock.systemUTC());
+        try (UnreachableRedis unreachable = unreachableRedis()) {
+            RedisLoginSessionStore broken = new RedisLoginSessionStore(unreachable.template(),
+                    java.time.Clock.systemUTC());
 
-        assertThatThrownBy(() -> broken.verify(SID, 42L)).isInstanceOf(LoginSessionStoreUnavailableException.class);
-        assertThatThrownBy(() -> broken.create(new NewLoginSession(SID, 42L, REFRESH_HASH, future())))
-                .isInstanceOf(LoginSessionStoreUnavailableException.class);
+            assertThatThrownBy(() -> broken.verify(SID, 42L)).isInstanceOf(LoginSessionStoreUnavailableException.class);
+            assertThatThrownBy(() -> broken.create(new NewLoginSession(SID, 42L, REFRESH_HASH, future())))
+                    .isInstanceOf(LoginSessionStoreUnavailableException.class);
+        }
     }
 
-    static StringRedisTemplate unreachableRedis() {
+    /** 닿지 않는 Redis(127.0.0.1:1). 테스트가 끝나면 close로 연결 팩터리를 정리한다. */
+    record UnreachableRedis(StringRedisTemplate template, LettuceConnectionFactory factory) implements AutoCloseable {
+        @Override
+        public void close() {
+            factory.destroy();
+        }
+    }
+
+    static UnreachableRedis unreachableRedis() {
         LettuceConnectionFactory factory = new LettuceConnectionFactory(
                 new RedisStandaloneConfiguration("127.0.0.1", 1),
                 LettuceClientConfiguration.builder().commandTimeout(Duration.ofMillis(300)).build());
         factory.afterPropertiesSet();
         StringRedisTemplate template = new StringRedisTemplate(factory);
         template.afterPropertiesSet();
-        return template;
+        return new UnreachableRedis(template, factory);
     }
 
     private long absoluteExpiry(String key) {
-        Long ttl = redisTemplate.getExpire(key, java.util.concurrent.TimeUnit.MILLISECONDS);
-        return System.currentTimeMillis() + ttl;
+        return redisTemplate.execute(new org.springframework.data.redis.core.script.DefaultRedisScript<>(
+                "return redis.call('PEXPIRETIME', KEYS[1])", Long.class), java.util.List.of(key));
     }
 
     private static Instant future() {

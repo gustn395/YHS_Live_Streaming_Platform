@@ -125,11 +125,13 @@ class RedisRequestRateLimiterTest extends RedisTestSupport {
 
     @Test
     void unreachableRedisIsServiceUnavailable() {
-        RedisRequestRateLimiter broken = new RedisRequestRateLimiter(
-                RedisLoginSessionStoreTest.unreachableRedis(), MemberLimitProperties.defaults());
+        try (RedisLoginSessionStoreTest.UnreachableRedis unreachable = RedisLoginSessionStoreTest.unreachableRedis()) {
+            RedisRequestRateLimiter broken = new RedisRequestRateLimiter(unreachable.template(),
+                    MemberLimitProperties.defaults());
 
-        assertThatThrownBy(() -> broken.acquire(RateLimitScope.SIGNUP, "203.0.113.7"))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        ex -> assertThat(ex.errorCode()).isEqualTo(CommonErrorCode.RATE_LIMIT_UNAVAILABLE));
+            assertThatThrownBy(() -> broken.acquire(RateLimitScope.SIGNUP, "203.0.113.7"))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.errorCode()).isEqualTo(CommonErrorCode.RATE_LIMIT_UNAVAILABLE));
+        }
     }
 }

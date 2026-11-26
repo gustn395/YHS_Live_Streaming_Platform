@@ -54,7 +54,8 @@ class LoginCompletionServiceTest {
         assertThat(session.expiresAt()).isEqualTo(NOW.plus(Duration.ofDays(7)));
         assertThat(session.sessionId()).matches("[A-Za-z0-9_-]{43}");
         assertThat(login.refreshToken()).matches("[A-Za-z0-9_-]{43}");
-        assertThat(session.refreshTokenHash()).matches("[0-9a-f]{64}").isNotEqualTo(login.refreshToken());
+        assertThat(session.refreshTokenHash()).matches("[0-9a-f]{64}").isNotEqualTo(login.refreshToken())
+                .isEqualTo(sha256Hex(login.refreshToken())); // 저장값은 반환한 Refresh 원문의 SHA-256
         assertThat(login.accessToken().value()).isEqualTo("jwt-" + session.sessionId());
         assertThat(login.sessionExpiresAt()).isEqualTo(session.expiresAt());
         assertThat(issuedFor).containsExactly("1:USER:" + session.sessionId());
@@ -137,6 +138,15 @@ class LoginCompletionServiceTest {
 
         storeFailure = new LoginSessionStoreUnavailableException("down", null);
         assertThatThrownBy(() -> service.complete(1L)).isInstanceOf(LoginSessionStoreUnavailableException.class);
+    }
+
+    private static String sha256Hex(String value) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+        } catch (java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     private static BusinessException failure(Runnable call) {

@@ -37,6 +37,7 @@ class OtpServiceTest {
 
     private final FakeStore store = new FakeStore();
     private final List<String[]> sent = new ArrayList<>();
+    private final List<Integer> confirmedAtSend = new ArrayList<>();
     private RuntimeException mailFailure;
     private final Deque<Integer> randoms = new ArrayDeque<>(List.of(1234, 1234, 5678, 9012));
     private final OtpCodes codes = new OtpCodes(new MemberOtpProperties(OTP_KEY, "otp-key-1"), () -> randoms.pop());
@@ -45,6 +46,7 @@ class OtpServiceTest {
         if (mailFailure != null) {
             throw mailFailure;
         }
+        confirmedAtSend.add(store.confirmed.size()); // 발송 시점에는 아직 활성화되지 않아야 한다
         sent.add(new String[] {email, code});
     }, id -> id == 42L ? Optional.of(member) : Optional.empty(), Clock.fixed(NOW, ZoneOffset.UTC),
             () -> "challenge-" + store.issued.size(), INTERVAL);
@@ -70,6 +72,19 @@ class OtpServiceTest {
         OtpCodes zeroes = new OtpCodes(new MemberOtpProperties(OTP_KEY, "otp-key-1"), () -> 7);
 
         assertThat(zeroes.newCode()).isEqualTo("0007");
+    }
+
+    @Test
+    void codesUseAsciiDigitsWhateverTheDefaultLocale() {
+        java.util.Locale original = java.util.Locale.getDefault();
+        try {
+            java.util.Locale.setDefault(java.util.Locale.forLanguageTag("th-TH-u-nu-thai"));
+            OtpCodes thai = new OtpCodes(new MemberOtpProperties(OTP_KEY, "otp-key-1"), () -> 42);
+
+            assertThat(thai.newCode()).isEqualTo("0042").matches("[0-9]{4}");
+        } finally {
+            java.util.Locale.setDefault(original);
+        }
     }
 
     @Test
@@ -130,7 +145,8 @@ class OtpServiceTest {
     void otpBecomesUsableOnlyAfterSmtpAcceptedTheMail() { // MB-D016
         LoginChallenge challenge = service.startForLogin(member);
 
-        assertThat(store.confirmed).containsExactly(challenge.challengeId() + "#1");
+        assertThat(confirmedAtSend).containsExactly(0); // SMTP 호출 동안 OTP는 확인 전 상태
+        assertThat(store.confirmed).containsExactly(challenge.challengeId() + "#1"); // 발송이 끝난 뒤 확인
     }
 
     @Test

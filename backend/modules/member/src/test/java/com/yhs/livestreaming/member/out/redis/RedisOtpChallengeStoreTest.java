@@ -371,12 +371,14 @@ class RedisOtpChallengeStoreTest extends RedisTestSupport {
 
     @Test
     void unreachableRedisIsStoreUnavailable() {
-        RedisOtpChallengeStore broken = new RedisOtpChallengeStore(
-                RedisLoginSessionStoreTest.unreachableRedis(), MemberLimitProperties.defaults(), java.time.Clock.systemUTC());
+        try (RedisLoginSessionStoreTest.UnreachableRedis unreachable = RedisLoginSessionStoreTest.unreachableRedis()) {
+            RedisOtpChallengeStore broken = new RedisOtpChallengeStore(unreachable.template(),
+                    MemberLimitProperties.defaults(), java.time.Clock.systemUTC());
 
-        assertThatThrownBy(() -> broken.issueForLogin(challenge("ch-1", "h"), now))
-                .isInstanceOf(LoginSessionStoreUnavailableException.class);
-        assertThatThrownBy(() -> broken.find("ch-1")).isInstanceOf(LoginSessionStoreUnavailableException.class);
+            assertThatThrownBy(() -> broken.issueForLogin(challenge("ch-1", "h"), now))
+                    .isInstanceOf(LoginSessionStoreUnavailableException.class);
+            assertThatThrownBy(() -> broken.find("ch-1")).isInstanceOf(LoginSessionStoreUnavailableException.class);
+        }
     }
 
     /** 발급 + 메일 발송 성공 확인까지 끝낸 상태(검증 가능). */
