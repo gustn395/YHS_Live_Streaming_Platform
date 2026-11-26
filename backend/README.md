@@ -67,6 +67,7 @@ main 대상 PR, main push, 수동 실행(`workflow_dispatch`) 때 [`.github/work
 | 환경변수 | 기본값 | 설명 |
 | --- | --- | --- |
 | `BACKEND_PORT` | `8080` | HTTP 포트 (`server.port`) |
+| `SPRINGDOC_ENABLED` | `false` | API 문서(`/v3/api-docs`)·Swagger UI 켜기. 개발·테스트에서만 `true`([G-D008](../docs/policy.md#3-공통-결정-이력)) |
 
 원칙:
 
@@ -82,7 +83,7 @@ $env:BACKEND_PORT = "18080"; .\gradlew.bat :app:bootRun          # PowerShell
 BACKEND_PORT=18080 ./gradlew :app:bootRun                          # bash
 ```
 
-Actuator는 `health`만 웹에 노출하고 상세 정보(`show-details: never`)는 숨긴다. `/actuator/env` 등 다른 엔드포인트는 404다(테스트로 확인).
+Actuator는 `health`만 웹에 노출하고 상세 정보(`show-details: never`)는 숨긴다. `/actuator/env` 등 다른 엔드포인트는 익명 요청이면 401, 인증된 요청이면 404다(테스트로 확인, [G-D011](../docs/policy.md#3-공통-결정-이력)).
 
 ## 5. 모듈과 패키지 규칙
 
@@ -90,9 +91,10 @@ Actuator는 `health`만 웹에 노출하고 상세 정보(`show-details: never`)
 backend/
 ├── settings.gradle.kts          # 모듈 목록, 저장소(mavenCentral) 선언
 ├── gradle/libs.versions.toml    # 고정 버전 (Spring Boot 등)
-├── build-logic/                 # 공통 빌드 규칙: yhs.java-conventions (Java 17, UTF-8, JUnit, Boot BOM)
-├── app/                         # 실행 모듈: 진입점, 설정, 도메인 모듈 조립, WAR
-└── modules/                     # 도메인 모듈 (build-logic의 yhs.domain-module-conventions 적용)
+├── build-logic/                 # 공통 빌드 규칙: yhs.java-conventions (Java 17, UTF-8, JUnit, Boot BOM, Spring 버전 일치 검사)
+├── app/                         # 실행 모듈: 진입점, 설정, global·도메인 모듈 조립, WAR
+└── modules/                     # global + 도메인 모듈 (build-logic의 yhs.domain-module-conventions 적용)
+    ├── global/       # 공통 기반: 공통 예외·오류 응답, 보안 기본 체인, 인증 계약, OpenAPI 공통 설정
     ├── member/       # 회원: 회원가입, 로그인, OTP, OAuth, 회원 정보
     ├── broadcast/    # 방송: 방송 생성·수정·조회, 방송 상태 관리
     ├── streaming/    # 스트리밍: MediaMTX 연동, WHIP 송출·WHEP 시청 인증, 방송 송출 제어
@@ -104,7 +106,9 @@ backend/
 
 ### 도메인 모듈 (Q9: 도메인 기준 분할)
 
-각 도메인 모듈에는 `modules/<domain>/build.gradle.kts`와 기본 패키지 `com.yhs.livestreaming.<domain>`(`package-info.java`)만 있다. 의존성과 계층 패키지는 구현할 때 추가한다. `app`은 7개 모듈을 모두 `implementation(project(...))`로 조립하고, 모듈 jar는 WAR의 `WEB-INF/lib/yhs-live-streaming-<domain>-<version>.jar`로 들어간다. 공통 코드가 생기면 `global` 모듈을 같은 방식으로 추가한다.
+각 도메인 모듈에는 `modules/<domain>/build.gradle.kts`와 기본 패키지 `com.yhs.livestreaming.<domain>`(`package-info.java`)만 있다. 의존성과 계층 패키지는 구현할 때 추가한다. `app`은 global과 7개 도메인 모듈을 모두 `implementation(project(...))`로 조립하고, 모듈 jar는 WAR의 `WEB-INF/lib/yhs-live-streaming-<module>-<version>.jar`로 들어간다.
+
+공통 기반 `modules/global/`(Issue #8, [G-D001](../docs/policy.md#3-공통-결정-이력))은 공통 예외·오류 응답, 보안 기본 체인, 인증 계약, OpenAPI 공통 설정을 둔다. global은 업무 규칙이 없어 계층 패키지 대신 기능별 패키지(`error`·`security`·`auth`·`openapi`)를 쓴다. 다른 모듈이 쓰는 공개 API는 [docs/global/module.md](../docs/global/module.md) 3장이다.
 
 모듈 안에서 계층을 패키지로 나눈다.
 
@@ -142,15 +146,15 @@ backend/
 
 ## 6. 의존성 도입 계획 (Q3)
 
-지금은 `spring-boot-starter-webmvc`, `spring-boot-starter-actuator`, `spring-boot-starter-tomcat-runtime`(providedRuntime), `spring-boot-starter-test`만 있다. 나머지는 아래 시점에 추가한다. 버전은 Spring Boot 4.1.3 BOM 기준이며, BOM이 관리하지 않는 것만 `gradle/libs.versions.toml`에 고정한다.
+지금은 `spring-boot-starter-webmvc`, `spring-boot-starter-actuator`, `spring-boot-starter-tomcat-runtime`(providedRuntime), `spring-boot-starter-test`와 global 모듈의 `spring-boot-starter-security`·`-validation`·springdoc, 테스트용 `spring-boot-starter-webmvc-test`(app)·`spring-boot-starter-security-test`(app, global)가 있다. 나머지는 아래 시점에 추가한다. 실행·테스트 클래스패스를 해석할 때 Boot·Framework 모듈 버전이 섞이면 실패한다([G-D012](../docs/policy.md#3-공통-결정-이력)). 이 검사는 IDE의 Gradle 동기화에도 똑같이 걸리므로, 동기화가 "Spring 버전 불일치"로 실패하면 메시지에 나온 의존성을 확인한다. 버전은 Spring Boot 4.1.3 BOM 기준이며, BOM이 관리하지 않는 것만 `gradle/libs.versions.toml`에 고정한다.
 
 | 기술 | 도입 시점 | 버전 (4.1.3 기준) | 주의 |
 | --- | --- | --- | --- |
-| JPA (Hibernate), PostgreSQL | 첫 엔티티 (Member) | Hibernate 7.4.15, JDBC 42.7.14 (BOM) | 넣으면 DataSource 자동 설정 때문에 DB 없이 실행되지 않는다. 테스트 방식(Testcontainers 등)을 그때 정한다 |
+| JPA (Hibernate), PostgreSQL | 첫 엔티티 (Member, BE-02) | Hibernate 7.4.15, JDBC 42.7.14 (BOM) | 넣으면 DataSource 자동 설정 때문에 DB 없이 실행되지 않는다. 테스트는 Testcontainers([G-D009](../docs/policy.md#3-공통-결정-이력)), 공통 설정 위치는 [G-D010](../docs/policy.md#3-공통-결정-이력) |
 | Flyway | 첫 테이블 | 12.4.0 (BOM) | PostgreSQL은 `flyway-database-postgresql` 모듈도 필요 |
-| Spring Security | Member 인증 | 7.1.3 (BOM) | 넣으면 모든 URL에 인증이 걸린다. `/actuator/health`는 허용해야 한다. 인증 방식 미결 (8장) |
+| Spring Security | global 공통 기반 (Issue #8) | 7.1.3 (BOM) | 넣으면 모든 URL에 인증이 걸린다. 기본 체인은 [G-D004](../docs/policy.md#3-공통-결정-이력), 인증 방식은 MB-U01(8장) |
 | Redis | 세션·OTP | Lettuce 7.5.2 (BOM) | |
-| springdoc OpenAPI | 첫 REST API | 3.x (Boot 4용, 확인 시점 3.2.1) — BOM 미관리 | Boot 3용 2.x는 쓸 수 없다 |
+| springdoc OpenAPI | global 공통 기반 (Issue #8) | 3.1.1 (Boot 4.1.0으로 빌드된 릴리스) — BOM 미관리, `libs.versions.toml` | Boot 3용 2.x, Boot 4.2용 3.2.x는 쓸 수 없다(4.2.x 모듈을 끌어와 버전이 섞인다). 운영 기본 비활성([G-D008](../docs/policy.md#3-공통-결정-이력), [G-D012](../docs/policy.md#3-공통-결정-이력)) |
 | JSP / JSTL | 관리자 화면 | Jasper 11.0.27, JSTL API 3.0.2, 구현체 3.0.1 (BOM) | 7장 확인 결과 참고 |
 | WebSocket / STOMP | Chat | `spring-boot-starter-websocket` (BOM) | |
 | MyBatis | 복잡한 조회가 실제로 필요할 때 | starter 4.x (확인 시점 4.1.0) — BOM 미관리 | Boot 3용 3.0.x는 쓸 수 없다 |
@@ -192,7 +196,7 @@ JSP 위치는 `app/src/main/webapp/WEB-INF/views/*.jsp`, taglib URI는 `jakarta.
 미결 (각 단계에서 결정):
 
 - 인증 방식: [MB-U01](../docs/member/decisions.md#2-미결)
-- DB 연동 테스트 방식: [G-U01](../docs/policy.md#4-공통-미결)
+- DB 연동 테스트 방식: [G-U01](../docs/policy.md#4-공통-미결) — 확정([G-D009](../docs/policy.md#3-공통-결정-이력))
 - Spring Boot 4.2+ 업그레이드 시점.
 
 ## 9. 결정 사항 (Step 3, 2026-11-24)
@@ -203,7 +207,7 @@ JSP 위치는 `app/src/main/webapp/WEB-INF/views/*.jsp`, taglib URI는 `jakarta.
 | Q2 | 계층 패키지(`in/app/domain/out`)는 구현할 때 만든다. **(2026-11-24 변경)** 도메인 기본 패키지 `com.yhs.livestreaming.<domain>`은 모듈 생성과 함께 `package-info.java`로 만든다 |
 | Q3 | 초기 의존성은 Web MVC, Actuator, Test, WAR/Tomcat만. 나머지는 6장 시점에 추가 |
 | Q4 | 상태 확인은 Actuator `/actuator/health`만 노출. 확인용 Controller는 만들지 않는다 |
-| Q5 | DB·Redis 없이 실행·테스트되게 유지. PostgreSQL·Redis 연결은 후속 Step |
+| Q5 | DB·Redis 없이 실행·테스트되게 유지. PostgreSQL·Redis 연결은 후속 Step **(2026-11-26 변경: [G-D009](../docs/policy.md#3-공통-결정-이력) — DB 연동 테스트는 Testcontainers, 단위 테스트는 외부 인프라 없이)** |
 | Q6 | WAR·Tomcat만 넣고, JSP는 저장소 밖 임시 실험으로 확인(7장). Jasper·JSTL은 관리자 화면 단계에서 추가 |
 | Q7 | Spring Boot 4.1.x (3.5.x는 2026-06-30 OSS 지원 종료로 제외) |
 | Q8 | 패키지 `com.yhs.livestreaming`, 클래스 `LiveStreamingApplication`, 프로젝트 `yhs-live-streaming-backend` |

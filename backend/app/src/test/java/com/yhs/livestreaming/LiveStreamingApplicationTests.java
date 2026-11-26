@@ -36,10 +36,11 @@ class LiveStreamingApplicationTests {
     }
 
     @Test
-    void otherActuatorEndpointsAreNotExposed() throws Exception {
-        // exposure.include: health → env 같은 민감한 엔드포인트는 웹에 노출되지 않는다.
-        assertThat(get("/actuator/env").statusCode()).isEqualTo(404);
-        assertThat(get("/actuator/beans").statusCode()).isEqualTo(404);
+    void otherActuatorEndpointsRequireAuthenticationForAnonymous() throws Exception {
+        // 보안 체인이 먼저 동작하므로 익명 요청은 401이다(G-D011). 인증된 요청이 404(비노출)인지는
+        // SecurityChainIntegrationTest에서 확인한다.
+        assertThat(get("/actuator/env").statusCode()).isEqualTo(401);
+        assertThat(get("/actuator/beans").statusCode()).isEqualTo(401);
     }
 
     private HttpResponse<String> get(String path) throws Exception {

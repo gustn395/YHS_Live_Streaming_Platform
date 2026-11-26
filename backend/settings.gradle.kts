@@ -21,6 +21,7 @@ rootProject.name = "yhs-live-streaming-backend"
 include(":app")
 
 include(
+    ":modules:global",
     ":modules:member",
     ":modules:broadcast",
     ":modules:streaming",
