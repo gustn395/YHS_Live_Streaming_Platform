@@ -24,6 +24,7 @@
 | comment | CM | [comment/INDEX.md](comment/INDEX.md) | [AGENTS.md](../backend/modules/comment/AGENTS.md) |
 | donation | DN | [donation/INDEX.md](donation/INDEX.md) | [AGENTS.md](../backend/modules/donation/AGENTS.md) |
 | recording | RC | [recording/INDEX.md](recording/INDEX.md) | [AGENTS.md](../backend/modules/recording/AGENTS.md) |
+| frontend (React SPA) | FE | [frontend/INDEX.md](frontend/INDEX.md) | [AGENTS.md](../frontend/AGENTS.md) |
 
 `docs/api/`, `docs/architecture/`는 아직 비어 있다(`.gitkeep`).
 
