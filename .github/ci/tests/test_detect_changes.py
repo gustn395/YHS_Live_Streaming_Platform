@@ -54,7 +54,7 @@ class ClassifyTest(unittest.TestCase):
             self.assertClass(p, "frontend")
 
     def test_docs_api_is_both(self):
-        self.assertClass("docs/api/openapi.yaml", "both")
+        self.assertClass("docs/api/openapi.yaml", "none")  # L3-2 임시 실패 주입 — 원복 예정
         self.assertClass("docs/api/.gitkeep", "both")
 
     def test_other_docs_are_none(self):
