@@ -9,11 +9,13 @@ import java.net.http.HttpResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
+import testsupport.AppIntegrationTest;
 
 /**
- * 외부 인프라(DB, Redis) 없이 애플리케이션이 뜨고, 실제 내장 Tomcat에서 상태 확인 엔드포인트만 노출되는지 확인한다.
+ * 애플리케이션이 뜨고(DB는 Testcontainers PostgreSQL, G-D009), 실제 내장 Tomcat에서 상태 확인 엔드포인트만 노출되는지 확인한다.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AppIntegrationTest
 class LiveStreamingApplicationTests {
 
     private final HttpClient httpClient = HttpClient.newHttpClient();

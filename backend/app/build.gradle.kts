@@ -24,9 +24,17 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
 
+    // DB: Flyway 마이그레이션(각 모듈의 db/migration), PostgreSQL 드라이버(G-D010). 접속 정보는 SPRING_DATASOURCE_* 환경변수
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    runtimeOnly("org.flywaydb:flyway-database-postgresql")
+    runtimeOnly("org.postgresql:postgresql")
+
     // 통합 테스트: MockMvc 자동 구성, 인증 사용자 요청(spring-security-test). Boot 4는 테스트 지원이 기술별 스타터로 나뉘었다.
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-starter-security-test")
+    // DB 연동 테스트: Testcontainers PostgreSQL(G-D009). 로컬 실행에는 Docker가 필요하다.
+    testImplementation("org.springframework.boot:spring-boot-testcontainers")
+    testImplementation("org.testcontainers:testcontainers-postgresql")
 
     // 외부 Tomcat에 배포할 때 컨테이너가 제공하는 런타임은 plain WAR에서 빠지도록 providedRuntime으로 둔다.
     // (실행 가능한 WAR에는 WEB-INF/lib-provided로 포함되어 java -jar 실행이 된다)

@@ -43,7 +43,7 @@ curl http://localhost:8080/actuator/health
 # {"groups":["liveness","readiness"],"status":"UP"}
 ```
 
-DB, Redis, Docker가 없어도 실행·테스트된다.
+실행에는 PostgreSQL이 필요하다(접속 정보와 pepper 키는 4장 환경변수). 테스트는 Testcontainers로 PostgreSQL을 띄우므로 **Docker가 실행 중이어야 한다**([G-D009](../docs/policy.md#3-공통-결정-이력)). 단위 테스트는 외부 인프라 없이 돈다. Redis는 아직 쓰지 않는다.
 
 ### CI (GitHub Actions)
 
@@ -67,6 +67,9 @@ main 대상 PR, main push, 수동 실행(`workflow_dispatch`) 때 [`.github/work
 | 환경변수 | 기본값 | 설명 |
 | --- | --- | --- |
 | `BACKEND_PORT` | `8080` | HTTP 포트 (`server.port`) |
+| `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD` | 없음 | PostgreSQL 접속 정보(Spring Boot 표준 이름). 설정 파일에 적지 않는다 |
+| `MEMBER_PASSWORD_PEPPER_KEY`, `MEMBER_PASSWORD_PEPPER_KEY_ID` | 없음 | 비밀번호 해시 pepper 키(SecureRandom 256bit를 Base64로)와 키 ID. 없거나 형식이 틀리면 기동 실패([MB-D007](../docs/member/decisions.md#1-확정-결정)) |
+| `MEMBER_PASSWORD_HIBP_BASE_URL` | `https://api.pwnedpasswords.com` | 유출 비밀번호 확인(HIBP range API) 주소. 서버에서 이 주소로 나가는 HTTPS 통신이 필요하고, 닿지 않으면 회원가입이 503이다([MB-D010](../docs/member/decisions.md#1-확정-결정)) |
 | `SPRINGDOC_ENABLED` | `false` | API 문서(`/v3/api-docs`)·Swagger UI 켜기. 개발·테스트에서만 `true`([G-D008](../docs/policy.md#3-공통-결정-이력)) |
 
 원칙:
@@ -146,13 +149,13 @@ backend/
 
 ## 6. 의존성 도입 계획 (Q3)
 
-지금은 `spring-boot-starter-webmvc`, `spring-boot-starter-actuator`, `spring-boot-starter-tomcat-runtime`(providedRuntime), `spring-boot-starter-test`와 global 모듈의 `spring-boot-starter-security`·`-validation`·springdoc, 테스트용 `spring-boot-starter-webmvc-test`(app)·`spring-boot-starter-security-test`(app, global)가 있다. 나머지는 아래 시점에 추가한다. 실행·테스트 클래스패스를 해석할 때 Boot·Framework 모듈 버전이 섞이면 실패한다([G-D012](../docs/policy.md#3-공통-결정-이력)). 이 검사는 IDE의 Gradle 동기화에도 똑같이 걸리므로, 동기화가 "Spring 버전 불일치"로 실패하면 메시지에 나온 의존성을 확인한다. 버전은 Spring Boot 4.1.3 BOM 기준이며, BOM이 관리하지 않는 것만 `gradle/libs.versions.toml`에 고정한다.
+지금은 `spring-boot-starter-webmvc`, `spring-boot-starter-actuator`, `spring-boot-starter-tomcat-runtime`(providedRuntime), `spring-boot-starter-test`와 global 모듈의 `spring-boot-starter-security`·`-validation`·`-data-jpa`·springdoc, app의 `spring-boot-starter-flyway`·PostgreSQL 드라이버·`flyway-database-postgresql`, 테스트용 `spring-boot-starter-webmvc-test`(app)·`spring-boot-starter-security-test`(app, global)·`spring-boot-starter-data-jpa-test`(member)·`spring-boot-testcontainers`와 Testcontainers PostgreSQL(app, member)이 있다. 나머지는 아래 시점에 추가한다. 실행·테스트 클래스패스를 해석할 때 Boot·Framework 모듈 버전이 섞이면 실패한다([G-D012](../docs/policy.md#3-공통-결정-이력)). 이 검사는 IDE의 Gradle 동기화에도 똑같이 걸리므로, 동기화가 "Spring 버전 불일치"로 실패하면 메시지에 나온 의존성을 확인한다. 버전은 Spring Boot 4.1.3 BOM 기준이며, BOM이 관리하지 않는 것만 `gradle/libs.versions.toml`에 고정한다.
 
 | 기술 | 도입 시점 | 버전 (4.1.3 기준) | 주의 |
 | --- | --- | --- | --- |
-| JPA (Hibernate), PostgreSQL | 첫 엔티티 (Member, BE-02) | Hibernate 7.4.15, JDBC 42.7.14 (BOM) | 넣으면 DataSource 자동 설정 때문에 DB 없이 실행되지 않는다. 테스트는 Testcontainers([G-D009](../docs/policy.md#3-공통-결정-이력)), 공통 설정 위치는 [G-D010](../docs/policy.md#3-공통-결정-이력) |
-| Flyway | 첫 테이블 | 12.4.0 (BOM) | PostgreSQL은 `flyway-database-postgresql` 모듈도 필요 |
-| Spring Security | global 공통 기반 (Issue #8) | 7.1.3 (BOM) | 넣으면 모든 URL에 인증이 걸린다. 기본 체인은 [G-D004](../docs/policy.md#3-공통-결정-이력), 인증 방식은 MB-U01(8장) |
+| JPA (Hibernate), PostgreSQL | 첫 엔티티 (Member, BE-02, 도입함) | Hibernate 7.4.15, JDBC 42.7.14 (BOM) | 넣으면 DataSource 자동 설정 때문에 DB 없이 실행되지 않는다. 테스트는 Testcontainers([G-D009](../docs/policy.md#3-공통-결정-이력)), 공통 설정 위치는 [G-D010](../docs/policy.md#3-공통-결정-이력) |
+| Flyway | 첫 테이블 (BE-02, 도입함) | 12.4.0 (BOM) | PostgreSQL은 `flyway-database-postgresql` 모듈도 필요. 마이그레이션은 각 모듈 `db/migration`, 버전은 날짜형 `V<yyyymmdd>_<순번>` |
+| Spring Security | global 공통 기반 (Issue #8) | 7.1.3 (BOM) | 넣으면 모든 URL에 인증이 걸린다. 기본 체인은 [G-D004](../docs/policy.md#3-공통-결정-이력), 인증 방식은 [MB-D002](../docs/member/decisions.md#1-확정-결정) |
 | Redis | 세션·OTP | Lettuce 7.5.2 (BOM) | |
 | springdoc OpenAPI | global 공통 기반 (Issue #8) | 3.1.1 (Boot 4.1.0으로 빌드된 릴리스) — BOM 미관리, `libs.versions.toml` | Boot 3용 2.x, Boot 4.2용 3.2.x는 쓸 수 없다(4.2.x 모듈을 끌어와 버전이 섞인다). 운영 기본 비활성([G-D008](../docs/policy.md#3-공통-결정-이력), [G-D012](../docs/policy.md#3-공통-결정-이력)) |
 | JSP / JSTL | 관리자 화면 | Jasper 11.0.27, JSTL API 3.0.2, 구현체 3.0.1 (BOM) | 7장 확인 결과 참고 |
@@ -195,7 +198,7 @@ JSP 위치는 `app/src/main/webapp/WEB-INF/views/*.jsp`, taglib URI는 `jakarta.
 
 미결 (각 단계에서 결정):
 
-- 인증 방식: [MB-U01](../docs/member/decisions.md#2-미결)
+- 인증 방식: [MB-U01](../docs/member/decisions.md#2-미결) — 확정([MB-D002](../docs/member/decisions.md#1-확정-결정))
 - DB 연동 테스트 방식: [G-U01](../docs/policy.md#4-공통-미결) — 확정([G-D009](../docs/policy.md#3-공통-결정-이력))
 - Spring Boot 4.2+ 업그레이드 시점.
 

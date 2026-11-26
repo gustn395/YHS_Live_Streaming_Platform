@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
+import testsupport.AppIntegrationTest;
 
 /**
  * GL-T009: application.yml 기본값(SPRINGDOC_ENABLED 미설정 = 운영 기본)에서는 OpenAPI 문서와 Swagger UI가 없다(G-D008).
@@ -17,6 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@AppIntegrationTest
 class OpenApiDisabledByDefaultIntegrationTest {
 
     @Autowired
