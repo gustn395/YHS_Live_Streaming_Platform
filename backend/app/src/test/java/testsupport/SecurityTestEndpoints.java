@@ -69,5 +69,10 @@ public class SecurityTestEndpoints {
         String echo(@Valid @RequestBody EchoRequest request) {
             return request.name();
         }
+
+        @PostMapping("/test/protected/echo")
+        String protectedEcho(@Valid @RequestBody EchoRequest request) {
+            return request.name();
+        }
     }
 }

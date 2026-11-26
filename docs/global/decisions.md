@@ -9,7 +9,7 @@ global 모듈의 결정·미결은 이 문서가 아니라 [docs/policy.md](../p
 
 ## 2. 미결
 
-- 원본: [policy.md 4장](../policy.md#4-공통-미결) G-U02(CSRF 방식).
+- 원본: [policy.md 4장](../policy.md#4-공통-미결). 남은 global 미결 없음(G-U02는 G-D014로 확정, 2026-11-26).
 
 ## 3. 변경 이력
 

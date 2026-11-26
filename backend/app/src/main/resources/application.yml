@@ -15,6 +15,24 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  # Redis(로그인 세션·OTP·요청 제한, MB-D014~D019). 접속 정보는 SPRING_DATA_REDIS_HOST·_PORT·_PASSWORD·_SSL_ENABLED
+  # 환경변수로 받는다(비밀번호 기본값 없음). 장애 시 인증 요청은 503(fail-closed, MB-D019).
+  data:
+    redis:
+      timeout: ${MEMBER_REDIS_TIMEOUT:2s}
+      connect-timeout: ${MEMBER_REDIS_CONNECT_TIMEOUT:1s}
+  # OTP 메일 SMTP(MB-D016). SPRING_MAIL_HOST·_PORT·_USERNAME·_PASSWORD 환경변수로만 받는다(기본값 없음, 없으면 기동 실패).
+  # 개발: Mailpit(인증·TLS 없음) → MEMBER_SMTP_AUTH=false, MEMBER_SMTP_STARTTLS=false
+  # 운영: Gmail SMTP(smtp.gmail.com:587, 앱 비밀번호) → MEMBER_SMTP_AUTH=true, MEMBER_SMTP_STARTTLS=true(필수)
+  # 두 값은 기본값이 없어 환경마다 반드시 정해야 한다. 타임아웃(ms)은 설정값이고 자동 재시도는 없다.
+  mail:
+    properties:
+      "[mail.smtp.auth]": ${MEMBER_SMTP_AUTH}
+      "[mail.smtp.starttls.enable]": ${MEMBER_SMTP_STARTTLS}
+      "[mail.smtp.starttls.required]": ${MEMBER_SMTP_STARTTLS}
+      "[mail.smtp.connectiontimeout]": ${MEMBER_SMTP_CONNECT_TIMEOUT_MS:3000}
+      "[mail.smtp.timeout]": ${MEMBER_SMTP_READ_TIMEOUT_MS:5000}
+      "[mail.smtp.writetimeout]": ${MEMBER_SMTP_WRITE_TIMEOUT_MS:5000}
 
 logging:
   level:
@@ -23,8 +41,12 @@ logging:
     # Hibernate 7은 SqlExceptionHelper의 SQL 오류 로그를 이 카테고리로 남긴다. 예외 자체는 그대로 전파된다.
     org.hibernate.orm.jdbc.error: OFF
 
-# member 비밀번호 pepper 키: MEMBER_PASSWORD_PEPPER_KEY(Base64 256bit)·MEMBER_PASSWORD_PEPPER_KEY_ID 환경변수로만 받는다.
-# 기본값이 없어 없으면 애플리케이션이 뜨지 않는다(MB-D007).
+# 비밀 키는 용도별로 분리하고 환경변수로만 받는다. 기본값이 없어 없으면 애플리케이션이 뜨지 않는다(MB-D007).
+# - 비밀번호 pepper: MEMBER_PASSWORD_PEPPER_KEY(Base64 256bit)·MEMBER_PASSWORD_PEPPER_KEY_ID
+# - Access Token(JWT HS256) 서명: AUTH_JWT_KEY(Base64 256bit)·AUTH_JWT_KEY_ID (MB-D012)
+# - OTP HMAC: MEMBER_OTP_HMAC_KEY(Base64 256bit)·MEMBER_OTP_HMAC_KEY_ID (MB-D015)
+# - OTP 메일 발신 주소: MEMBER_OTP_MAIL_FROM (MB-D016)
+# 요청·로그인·OTP 제한 수치는 member.limits.*로 바꿀 수 있고 기본값이 정책 값이다(MB-D017, MB-D018).
 
 server:
   port: ${BACKEND_PORT:8080}
@@ -45,3 +67,7 @@ management:
   endpoint:
     health:
       show-details: never
+  health:
+    mail:
+      # health 확인마다 SMTP 서버(운영: Gmail)에 접속하지 않는다. SMTP 장애는 로그인 503(MEMBER_OTP_DELIVERY_UNAVAILABLE)으로 드러난다.
+      enabled: false

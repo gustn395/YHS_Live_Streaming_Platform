@@ -19,5 +19,8 @@
 | 2026-11-26 | `.\gradlew.bat :app:build` (Commit 직전 App build) | 성공(exit 0) | `:app:test` UP-TO-DATE(직전 `--rerun-tasks` 실행 결과 재사용, app 19건 통과), `bootWar`·`war` 새로 생성. WAR 2개 모두 `WEB-INF/lib`에 global 포함 모듈 jar 8개 |
 | 2026-11-26 | `.\gradlew.bat :modules:global:test --tests com.yhs.livestreaming.global.error.GlobalExceptionHandlerTest` (CodeRabbit 지적 확인용 테스트 추가, 수정 전) | 15건 중 1 실패(의도) | 컨트롤러 반환값 `@NotBlank` 위반이 500이 아니라 400 → 지적 재현 |
 | 2026-11-26 | `.\gradlew.bat :modules:global:test :app:test --continue` (수정 후) | 성공(exit 0), 45건 통과(global 26, app 19) | |
+| 2026-11-26 | (#13) `.\gradlew.bat :modules:global:test --tests "*GlobalExceptionHandlerTest"`, `:app:test --tests "*CsrfIntegrationTest"`, `:modules:global:test --tests "*security.jwt*"` (테스트 먼저, RED) | 컴파일 실패 또는 실패(의도) | 429·CSRF 코드, `/csrf`·CSRF 활성화, JWT 발급·검증·필터 없음. CSRF 쿠키 속성은 MockMvc `Set-Cookie` 문자열에 SameSite가 없어 `Cookie` 속성으로 단언을 바꿈 |
+| 2026-11-26 | `.\gradlew.bat :modules:global:test --tests "*security.jwt*"` (구현 1차) | 19건 중 2 실패 | HS512 서명에 256비트 키(테스트 구성 문제), `iat` 누락 토큰 통과(원인: Spring `Jwt` 빌더가 `iat`를 `exp-1초`로 채움 → 토큰 원문으로 확인) |
+| 2026-11-26 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (S5) | 성공(exit 0). global 54, app 69(global 쪽 32: `SecurityChainIntegrationTest` 11, `CsrfIntegrationTest` 9, `AccessTokenCookieIntegrationTest` 5, `LiveStreamingApplicationTests` 3, OpenAPI 4) 통과 | member는 member regression-log |
 
 - 미실행: 로컬 전체 `./gradlew clean build`(빌드 정책상 실행하지 않음, CI가 실행), 실행 가능한 WAR 기동·외부 Tomcat 배포 확인.

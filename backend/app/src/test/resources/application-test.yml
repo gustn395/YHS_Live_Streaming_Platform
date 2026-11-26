@@ -7,3 +7,23 @@ member:
     # 테스트는 실제 HIBP를 부르지 않는다(MB-D010). 통합 테스트는 대역 빈을 쓰고, 실수로 실제 어댑터가 불려도 닿지 않는 주소다.
     hibp:
       base-url: http://127.0.0.1:9
+  otp:
+    # 테스트 전용 OTP HMAC 키(MB-D007). 비밀 값이 아니며 운영 키로 쓰면 안 된다.
+    hmac-key: Zm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyMTI=
+    hmac-key-id: test-otp-1
+    mail:
+      from: no-reply@example.com
+spring:
+  # 통합 테스트는 메일 대역(CapturingOtpMailSender)을 쓴다. 실수로 실제 어댑터가 불려도 닿지 않는 주소다.
+  mail:
+    host: 127.0.0.1
+    port: 9
+    properties:
+      "[mail.smtp.auth]": false
+      "[mail.smtp.starttls.enable]": false
+      "[mail.smtp.starttls.required]": false
+auth:
+  jwt:
+    # 테스트 전용 Access Token 서명 키(SecureRandom 256bit, MB-D007·MB-D012). 비밀 값이 아니며 운영 키로 쓰면 안 된다.
+    key: Cn8yJ3Yb7m0r1nC8wq6c0r0mP2aK0w1o5S8e3x6v9Qc=
+    key-id: test-jwt-1

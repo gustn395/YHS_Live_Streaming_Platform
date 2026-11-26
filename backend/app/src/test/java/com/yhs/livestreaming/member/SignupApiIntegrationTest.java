@@ -28,6 +28,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import com.yhs.livestreaming.member.app.password.BreachedPasswordChecker.Result;
 import testsupport.AppIntegrationTest;
+import testsupport.RealCsrf;
 import testsupport.StubBreachedPasswordChecker;
 
 /**
@@ -42,6 +43,7 @@ import testsupport.StubBreachedPasswordChecker;
 class SignupApiIntegrationTest {
 
     private static final String PASSWORD = "correct horse battery staple";
+    private static final java.util.concurrent.atomic.AtomicInteger NEXT_IP = new java.util.concurrent.atomic.AtomicInteger();
 
     @Autowired
     private MockMvc mockMvc;
@@ -51,6 +53,14 @@ class SignupApiIntegrationTest {
 
     @Autowired
     private StubBreachedPasswordChecker breachedPasswordChecker;
+
+    /** 실제 발급 API의 CSRF 토큰(G-D014). 가입 응답에 Set-Cookie가 없는지도 실제 쿠키 저장소로 확인한다. */
+    private String csrfToken;
+
+    @org.junit.jupiter.api.BeforeEach
+    void issueCsrfToken() throws Exception {
+        csrfToken = RealCsrf.issue(mockMvc);
+    }
 
     @AfterEach
     void cleanUp() {
@@ -234,7 +244,13 @@ class SignupApiIntegrationTest {
         String body = """
                 {"username": %s, "password": %s, "passwordConfirm": %s, "email": %s, "nickname": %s}
                 """.formatted(json(username), json(password), json(passwordConfirm), json(email), json(nickname));
-        return post("/api/v1/auth/signup").contentType(MediaType.APPLICATION_JSON).content(body);
+        // CSRF 보호(G-D014)는 CsrfIntegrationTest가 검증한다. 여기서는 발급 API의 실제 토큰을 붙인다.
+        // IP 요청 제한(MB-D018)은 LoginApiIntegrationTest가 검증한다. 여기서는 요청마다 다른 IP를 써서 가입 규칙만 본다.
+        String clientIp = "198.18.0." + (NEXT_IP.incrementAndGet() % 250 + 1);
+        return post("/api/v1/auth/signup").with(RealCsrf.token(csrfToken)).with(request -> {
+            request.setRemoteAddr(clientIp);
+            return request;
+        }).contentType(MediaType.APPLICATION_JSON).content(body);
     }
 
     private static String json(String value) {

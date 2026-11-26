@@ -9,6 +9,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Duration;
+import java.time.Instant;
 
 /**
  * 회원(docs/member/CONTEXT.md 4장). 스키마는 Flyway {@code V20261126_1__member_create_members.sql}이 원본이고
@@ -71,6 +73,17 @@ public class Member extends BaseTimeEntity {
         member.accountType = AccountType.LOCAL;
         member.accountStatus = AccountStatus.PENDING;
         return member;
+    }
+
+    /**
+     * PENDING 유지 기간(MB-D003): 가입 시각 기준 24시간, 연장 없음. 이 시각이 지나면 로그인할 수 없고 정리 대상이다.
+     */
+    public static final Duration PENDING_TTL = Duration.ofHours(24);
+
+    /** PENDING이고 가입 후 24시간이 지났으면 true(지난 순간부터 만료). */
+    public boolean isPendingExpired(Instant now) {
+        return accountStatus == AccountStatus.PENDING && getCreatedAt() != null
+                && !now.isBefore(getCreatedAt().plus(PENDING_TTL));
     }
 
     private static void requireText(String value, String name) {

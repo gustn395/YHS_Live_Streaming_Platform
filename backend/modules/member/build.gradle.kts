@@ -9,7 +9,13 @@ dependencies {
     implementation(project(":modules:global"))
     // 회원가입 API Spec 인터페이스의 OpenAPI 어노테이션(G-D008)
     implementation(libs.springdoc.openapi.starter.webmvc.ui)
+    // 로그인 세션·Refresh Token·OTP·요청 제한 저장소(MB-D014~D019)
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    // OTP 메일 SMTP 발송(MB-D016)
+    implementation("org.springframework.boot:spring-boot-starter-mail")
 
+    // Redis 어댑터 테스트: Testcontainers Redis(GenericContainer, G-D009). SMTP 어댑터 테스트: Testcontainers Mailpit
+    testImplementation("org.springframework.boot:spring-boot-starter-data-redis-test")
     // 영속성 테스트: Testcontainers PostgreSQL + Flyway 마이그레이션(G-D009)
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")

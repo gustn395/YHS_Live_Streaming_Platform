@@ -135,6 +135,50 @@ class MemberRepositoryAdapterTest {
                 .hasMessageContaining("uk_member_oauth_accounts_provider_user");
     }
 
+    @Test
+    void findsMemberByUsernameAndId() { // MB-T018 기반: 로그인 조회
+        Member saved = repository.save(local("tester01", "tester@example.com"));
+
+        assertThat(repository.findByUsername("tester01")).get().extracting(Member::getId).isEqualTo(saved.getId());
+        assertThat(repository.findById(saved.getId())).isPresent();
+        assertThat(repository.findByUsername("nobody01")).isEmpty();
+    }
+
+    @Test
+    void rehashUpdatesOnlyWhenStoredHashIsStillTheExpectedOne() { // MB-T031
+        Member saved = repository.save(local("tester01", "tester@example.com"));
+        java.time.Instant now = java.time.Instant.now();
+
+        assertThat(repository.updatePasswordHash(saved.getId(), "someone-else-changed-it", "new-hash", now)).isZero();
+        assertThat(repository.updatePasswordHash(saved.getId(), "pbkdf2-sha256$test-hash", "new-hash", now))
+                .isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT password_hash FROM members WHERE id = ?", String.class, saved.getId()))
+                .isEqualTo("new-hash");
+    }
+
+    @Test
+    void activationChangesOnlyUnexpiredPendingMembers() { // MB-T022·MB-T030: 조건부 활성화
+        java.time.Instant now = java.time.Instant.now();
+        java.time.Instant cutoff = now.minus(java.time.Duration.ofHours(24));
+        Member valid = repository.save(local("tester01", "valid@example.com"));
+        Member expired = repository.save(local("tester02", "expired@example.com"));
+        Member disabled = repository.save(local("tester03", "disabled@example.com"));
+        jdbc.update("UPDATE members SET created_at = now() - INTERVAL '25 hours' WHERE id = ?", expired.getId());
+        jdbc.update("UPDATE members SET account_status = 'DISABLED' WHERE id = ?", disabled.getId());
+
+        assertThat(repository.activatePending(valid.getId(), cutoff, now)).isEqualTo(1);
+        assertThat(repository.activatePending(valid.getId(), cutoff, now)).isZero(); // 이미 ACTIVE: 멱등
+        assertThat(repository.activatePending(expired.getId(), cutoff, now)).isZero();
+        assertThat(repository.activatePending(disabled.getId(), cutoff, now)).isZero();
+
+        assertThat(jdbc.queryForMap("SELECT account_status, email_verified FROM members WHERE id = ?", valid.getId()))
+                .containsEntry("account_status", "ACTIVE").containsEntry("email_verified", true);
+        assertThat(jdbc.queryForObject("SELECT account_status FROM members WHERE id = ?", String.class,
+                expired.getId())).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("SELECT account_status FROM members WHERE id = ?", String.class,
+                disabled.getId())).isEqualTo("DISABLED");
+    }
+
     private static Member local(String username, String email) {
         return Member.registerLocal(username, "pbkdf2-sha256$test-hash", email, "닉네임");
     }

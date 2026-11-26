@@ -7,7 +7,7 @@
 
 - 오류 응답은 ProblemDetail(RFC 9457) + `code` + `errors[]` 형식이다. Spring Security의 401·403도 같다. 성공 응답은 감싸지 않는다([G-D003](#3-공통-결정-이력)).
 - 보안 체인은 stateless다. 각 모듈이 등록한 공개 경로, `/actuator/health`, 개발·테스트의 Swagger만 인증 없이 허용하고 나머지는 인증이 필요하다([G-D004](#3-공통-결정-이력), [G-D011](#3-공통-결정-이력)).
-- CSRF 보호가 꺼진 동안에는 쿠키 기반 인증을 도입하지 않고, 인증 기능을 외부에 공개하지 않는다([G-D005](#3-공통-결정-이력), [G-U02](#4-공통-미결)).
+- CSRF는 SPA 이중 제출 방식(`XSRF-TOKEN` 쿠키 + `X-XSRF-TOKEN` 헤더)으로 막고, 로그인·가입·OTP 같은 공개 상태 변경 API도 보호한다. CSRF 보호가 꺼진 상태로는 쿠키 기반 인증을 도입하거나 외부에 공개하지 않는다([G-D005](#3-공통-결정-이력), [G-D014](#3-공통-결정-이력)).
 - Boot 기본 계정·HTTP Basic·폼 로그인을 쓰지 않는다([G-D013](#3-공통-결정-이력)).
 - 다른 모듈은 현재 회원을 `@CurrentMember`(`AuthenticatedMember`)로 받는다([G-D006](#3-공통-결정-이력)).
 - springdoc 문서·Swagger UI는 운영 기본값이 비활성이다([G-D008](#3-공통-결정-이력)). springdoc은 Boot와 같은 마이너 버전으로 빌드된 릴리스를 쓰고, Boot·Framework 모듈 버전이 섞이면 빌드가 실패한다([G-D012](#3-공통-결정-이력)).
@@ -24,6 +24,10 @@
 - 비밀번호는 PBKDF2-HMAC-SHA256 + pepper로 해시하고 원문을 저장·로깅하지 않는다([MB-D006](member/decisions.md#1-확정-결정)).
 - 비밀 키는 용도별로 분리하고 기본값 없는 환경변수로만 받으며, 잘못되면 기동에 실패한다([MB-D007](member/decisions.md#1-확정-결정)).
 - username·이메일은 소문자로 정규화하고 중복이면 409다. 회원가입에서만 중복을 안내한다([MB-D008](member/decisions.md#1-확정-결정), [MB-D009](member/decisions.md#1-확정-결정)).
+- 로그인은 매번 비밀번호 1차 인증 → 이메일 OTP(4자리) → 토큰 발급이다. 인증 실패 응답은 계정 존재와 관계없이 같다([MB-D011](member/decisions.md#1-확정-결정), [MB-D015](member/decisions.md#1-확정-결정)).
+- Access Token은 HS256 JWT(15분), Refresh Token은 256비트 난수(7일 절대 만료, 해시만 저장)이고 HttpOnly·Secure·SameSite=Strict 쿠키로 전달한다([MB-D012](member/decisions.md#1-확정-결정)~[MB-D014](member/decisions.md#1-확정-결정)).
+- OTP 메일은 SMTP로 동기 발송하고 실패하면 503이다([MB-D016](member/decisions.md#1-확정-결정)).
+- 로그인 실패·회원 단위 OTP·IP 기준 요청 수를 제한하고(429), Redis를 쓸 수 없으면 인증 관련 요청을 503으로 거부한다([MB-D017](member/decisions.md#1-확정-결정)~[MB-D019](member/decisions.md#1-확정-결정)).
 
 ## 3. 공통 결정 이력
 
@@ -42,10 +46,11 @@
 | G-D011 | 노출하지 않은 Actuator 엔드포인트에 대한 익명 요청은 다른 보호 경로처럼 401이다. 비노출 여부는 인증된 요청이 404인지로 검증한다. | 공개 경로만 허용하는 G-D004와 같고, exposure 설정을 실수로 넓혀도 인증 없이 열리지 않는다. | Member 7차 Q1(Issue #8), 2026-11-26 |
 | G-D012 | springdoc 버전은 3.1.1이다(G-D008의 3.2.1을 바꾼다. 나머지 G-D008 내용은 유지). springdoc은 같은 Spring Boot 마이너 버전으로 빌드된 릴리스를 쓰고, 빌드는 `org.springframework.boot` 모듈이 모두 Boot 버전과 같고 Spring Framework 모듈이 한 버전인지 검사한다. | springdoc 3.2.1은 Boot 4.2.0으로 빌드돼 `spring-boot-webmvc 4.2.0`·`spring-web 7.1.0`을 끌어오고, Gradle 충돌 해결로 Boot 4.1.3과 섞여 자동 설정이 깨졌다(관측 convention 빈 2개). 3.1.1은 Boot 4.1.0으로 빌드됐다(Maven Central POM 부모 버전). | Member 8차 Q1(Issue #8), 2026-11-26 |
 | G-D013 | Spring Boot 기본 계정(인메모리 사용자와 기동 시 생성 비밀번호)을 쓰지 않는다(`UserDetailsServiceAutoConfiguration` 제외). 인증은 global 보안 체인과 member 모듈이 맡는다. HTTP Basic·폼 로그인 같은 기본 인증 방식은 켜지 않는다. | 기본 계정은 쓰는 곳이 없는데 생성 비밀번호가 로그에 남고, 인증 경로가 하나 더 생긴다. | Member 9차 Q2(Issue #8 S6 리뷰), 2026-11-26 |
+| G-D014 | CSRF는 SPA 이중 제출 방식으로 막는다. Spring Security 7의 `csrf.spa()`는 쓰지 않고, [Spring Security 6.5 공식 문서](https://docs.spring.io/spring-security/reference/6.5/servlet/exploits/csrf.html)의 구성(`CookieCsrfTokenRepository.withHttpOnlyFalse()` + 문서 기반 `SpaCsrfTokenRequestHandler`, BREACH 대응)을 적용한다. 토큰은 `XSRF-TOKEN` 쿠키(HttpOnly 아님, Secure, SameSite=Strict, Path=/, Domain 미지정)와 `X-XSRF-TOKEN` 헤더로 주고받는다. 로그인·회원가입·OTP 등 공개 상태 변경 API도 보호한다. 인증 전 초기 토큰은 공개 `GET /api/v1/auth/csrf`(204, 본문 없음, `Cache-Control: no-store`)로 받고, 지연 로딩된 토큰을 실제로 로드해 쿠키를 발급한다. OTP 최종 인증에 성공하면 CSRF 토큰을 명시적으로 갱신해 새 쿠키를 준다(비밀번호 1차 인증은 최종 로그인과 구분). 자체 로그인 API에서 Spring Security 인증 성공 처리가 자동으로 실행된다고 가정하지 않는다. 로그아웃 관련 CSRF 처리는 BE-04에서 한다. Frontend 반영(FE-D014·FE-U04)은 Frontend 협의 안건이다. G-U02를 닫고, G-D005의 활성화 조건을 채운다. | 쿠키 인증을 도입하면 CSRF 보호가 필요하다(G-D005). SPA와 API가 같은 출처(FE-D002)이고 stateless 체인(G-D004)과 맞는다. 비즈니스 코드는 Boot 3.5 / Security 6.x 호환 API를 우선한다(루트 AGENTS.md). | BE-03 1라운드 Q3(구현 방식 수정)·2라운드 Q1·3라운드 Q4, Issue #13, 2026-11-26 |
 
 ## 4. 공통 미결
 
 | ID | 미결 | 상태 | 출처·결정 시점 |
 | --- | --- | --- | --- |
 | G-U01 | DB 연동 테스트 방식(Testcontainers, Docker Compose 등): JPA 도입 단계에서 결정. | 확정 (G-D009) | `backend/README.md` 8장에서 이관(2026-11-25). 결정 시점 근거: [README 6장](../backend/README.md#6-의존성-도입-계획-q3) |
-| G-U02 | CSRF 보호 방식(예: 쿠키 이중 제출 토큰)과 쿠키 속성. CSRF가 꺼진 동안의 조건은 G-D005. | 미결 | Member 4차 Q1(2026-11-26). 결정 시점: BE-03(MB-W05) 착수 전 |
+| G-U02 | CSRF 보호 방식(예: 쿠키 이중 제출 토큰)과 쿠키 속성. CSRF가 꺼진 동안의 조건은 G-D005. | 확정 (G-D014) | Member 4차 Q1(2026-11-26). 결정 시점: BE-03(MB-W05) 착수 전 |
