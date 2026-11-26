@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
+import testsupport.AppIntegrationTest;
 
 /**
  * GL-T008: 개발·테스트처럼 springdoc을 켠 환경에서는 OpenAPI 문서와 Swagger UI를 인증 없이 볼 수 있고, 문서에 공통 오류
@@ -16,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
  */
 @SpringBootTest(properties = {"springdoc.api-docs.enabled=true", "springdoc.swagger-ui.enabled=true"})
 @AutoConfigureMockMvc
+@AppIntegrationTest
 class OpenApiEnabledIntegrationTest {
 
     @Autowired

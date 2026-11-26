@@ -19,6 +19,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import testsupport.AppIntegrationTest;
 import testsupport.SecurityTestEndpoints;
 
 /**
@@ -27,6 +28,7 @@ import testsupport.SecurityTestEndpoints;
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@AppIntegrationTest
 @Import(SecurityTestEndpoints.class)
 class SecurityChainIntegrationTest {
 

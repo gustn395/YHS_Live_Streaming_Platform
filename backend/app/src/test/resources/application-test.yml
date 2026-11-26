@@ -1,0 +1,9 @@
+# 테스트 전용 설정(test 프로필). 운영·개발 환경에서 쓰지 않는다.
+member:
+  password:
+    # 테스트 전용 pepper 키(SecureRandom 256bit, MB-D007). 비밀 값이 아니며 운영 키로 쓰면 안 된다.
+    pepper-key: 7Z6RRuZSnLyTcuYWD+AVthYIE51XWaIGsUbYwbOYuU4=
+    pepper-key-id: test-key-1
+    # 테스트는 실제 HIBP를 부르지 않는다(MB-D010). 통합 테스트는 대역 빈을 쓰고, 실수로 실제 어댑터가 불려도 닿지 않는 주소다.
+    hibp:
+      base-url: http://127.0.0.1:9

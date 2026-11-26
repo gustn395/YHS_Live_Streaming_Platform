@@ -3,3 +3,19 @@
 plugins {
     id("yhs.domain-module-conventions")
 }
+
+dependencies {
+    // 공통 기반: 오류 코드·공개 경로 등록·JPA 공통 설정(G-D001, G-D010)
+    implementation(project(":modules:global"))
+    // 회원가입 API Spec 인터페이스의 OpenAPI 어노테이션(G-D008)
+    implementation(libs.springdoc.openapi.starter.webmvc.ui)
+
+    // 영속성 테스트: Testcontainers PostgreSQL + Flyway 마이그레이션(G-D009)
+    testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
+    testImplementation("org.springframework.boot:spring-boot-testcontainers")
+    testImplementation("org.testcontainers:testcontainers-postgresql")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+    testImplementation("org.springframework.boot:spring-boot-starter-flyway")
+    testRuntimeOnly("org.flywaydb:flyway-database-postgresql")
+    testRuntimeOnly("org.postgresql:postgresql")
+}

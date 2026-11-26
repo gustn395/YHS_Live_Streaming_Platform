@@ -12,8 +12,9 @@
 | `security` | `GlobalSecurityConfig`(stateless 기본 체인), `PublicEndpoint`·`PublicEndpointContributor`(모듈별 공개 경로), 401·403 처리기(MVC 예외 처리기로 위임) | G-D004, G-D005, G-D011 |
 | `auth` | `AuthenticatedMember`, `@CurrentMember`와 리졸버, `LoginSessionVerifier`(포트)·`LoginSessionStatus`·`LoginSessionStoreUnavailableException` | G-D006, G-D007 |
 | `openapi` | 공통 `OpenAPI`, `ProblemDetail` 오류 스키마(`OpenApiCustomizer`), 문서가 켜졌을 때만 문서 경로 공개 | G-D008, G-D012 |
+| `persistence` | `GlobalJpaConfig`(`@EnableJpaAuditing`), `BaseTimeEntity`(`created_at`·`updated_at` TIMESTAMPTZ를 감사 기능으로 채움) | G-D010 |
 
-- 다음 작업에서 더할 것: JWT 검증 필터와 CSRF 활성화(MB-W05, G-U02), `LoginSessionVerifier` 구현(member, MB-W05~W08), DB 공통 설정(BE-02, G-D010).
+- 다음 작업에서 더할 것: JWT 검증 필터와 CSRF 활성화(MB-W05, G-U02), `LoginSessionVerifier` 구현(member, MB-W05~W08).
 - OpenAPI 보안 스킴: BE-01에서는 정의하지 않는다. 실제 인증 쿠키의 이름·속성이 정해지는 BE-03(MB-W05)에서 cookie 방식 `securitySchemes`를 정의한다. 가칭 쿠키 스킴이나 Bearer 스킴은 넣지 않는다(Issue #8 범위 변경, 2026-11-26 사용자 결정).
 
 ## 2. As-Is
@@ -27,7 +28,8 @@
 - 설정: `app/src/main/resources/application.yml` — `springdoc.api-docs.enabled`·`swagger-ui.enabled` = `${SPRINGDOC_ENABLED:false}`, `spring.autoconfigure.exclude`로 Boot 기본 계정(`UserDetailsServiceAutoConfiguration`) 제외(G-D013).
 - 코드: 1장 표의 클래스가 모두 있다. JWT 필터·`LoginSessionVerifier` 구현은 없다.
 - 오류 코드: `COMMON_INVALID_INPUT`(400 검증), `COMMON_INTERNAL_ERROR`(500), `AUTH_UNAUTHENTICATED`(401), `AUTH_ACCESS_DENIED`(403), `AUTH_SESSION_STORE_UNAVAILABLE`(503). 프레임워크가 만든 오류는 `COMMON_<HTTP 상태 이름>`(예: `COMMON_NOT_FOUND`, `COMMON_BAD_REQUEST`).
-- 테스트: global 단위 테스트 4클래스 26건(외부 인프라 없음), app 통합 테스트 4클래스 19건(Docker 없음). 통합 테스트 전용 엔드포인트는 스캔 범위 밖 패키지 `testsupport`에 있다.
+- JPA 공통(GL-W06, Issue #10): global이 `spring-boot-starter-data-jpa`를 `api`로 내놓는다. 감사 기능 동작은 member 영속성 테스트(MB-T010)가 확인한다.
+- 테스트: global 단위 테스트(외부 인프라 없음)와 app 통합 테스트. 건수는 [test-spec.md](test-spec.md) 2장이 원본이다. BE-02부터 app 통합 테스트는 Testcontainers PostgreSQL을 쓰므로 Docker가 필요하다(`testsupport.AppIntegrationTest`). 통합 테스트 전용 엔드포인트는 스캔 범위 밖 패키지 `testsupport`에 있다.
 
 ## 3. 공개 API
 
@@ -41,6 +43,7 @@
 | `auth.AuthenticatedMember` / `@CurrentMember` | 컨트롤러 인자 `@CurrentMember AuthenticatedMember member`. 인증 주체가 없으면 401 |
 | `auth.LoginSessionVerifier` | member가 구현한다. 계약은 인터페이스 Javadoc과 G-D007 |
 | `openapi.OpenApiConfig.PROBLEM_DETAIL_SCHEMA` | API Spec의 오류 응답에서 참조할 스키마 이름 |
+| `persistence.BaseTimeEntity` | 엔티티가 상속하면 `created_at`·`updated_at`이 자동으로 채워진다. 테이블에 두 컬럼(TIMESTAMPTZ NOT NULL)을 둔다 |
 
 ## 4. 다른 모듈 의존
 

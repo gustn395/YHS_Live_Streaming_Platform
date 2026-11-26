@@ -9,6 +9,8 @@ dependencies {
     api("org.springframework.boot:spring-boot-starter-webmvc")
     api("org.springframework.boot:spring-boot-starter-security")
     api("org.springframework.boot:spring-boot-starter-validation")
+    // DB 공통 설정(G-D010): JPA 감사 기능과 생성·수정 시각 기반 클래스(BaseTimeEntity)를 도메인 모듈이 함께 쓴다.
+    api("org.springframework.boot:spring-boot-starter-data-jpa")
 
     implementation(libs.springdoc.openapi.starter.webmvc.ui)
 
