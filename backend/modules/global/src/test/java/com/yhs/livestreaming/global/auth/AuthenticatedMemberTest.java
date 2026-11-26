@@ -15,7 +15,7 @@ class AuthenticatedMemberTest {
     void keepsIdentityValues() {
         AuthenticatedMember member = new AuthenticatedMember(42L, "USER", "session-1");
 
-        assertThat(member.memberId()).isEqualTo(43L); // L3-4a 임시 실패 주입 — 원복 예정
+        assertThat(member.memberId()).isEqualTo(42L);
         assertThat(member.role()).isEqualTo("USER");
         assertThat(member.sessionId()).isEqualTo("session-1");
     }
