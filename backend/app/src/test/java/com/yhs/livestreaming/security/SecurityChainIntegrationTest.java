@@ -3,7 +3,6 @@ package com.yhs.livestreaming.security;
 import static testsupport.TestAuthentications.member;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -104,15 +103,6 @@ class SecurityChainIntegrationTest {
 
         assertThat(anonymous.getRequest().getSession(false)).isNull();
         assertThat(authenticated.getRequest().getSession(false)).isNull();
-    }
-
-    @Test
-    void publicPostWithoutCsrfTokenIsNotRejected() throws Exception { // GL-T006, G-D005: CSRF 비활성(쿠키 인증 도입 전 한정)
-        mockMvc.perform(post("/test/public/echo")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"hello\"}"))
-                .andExpect(status().isOk())
-                .andExpect(content().string("hello"));
     }
 
     @Test

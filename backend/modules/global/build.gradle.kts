@@ -13,6 +13,8 @@ dependencies {
     api("org.springframework.boot:spring-boot-starter-data-jpa")
 
     implementation(libs.springdoc.openapi.starter.webmvc.ui)
+    // Access Token(JWT HS256) 발급·검증: Nimbus JOSE + Spring Security JWT 인코더·디코더(MB-D012, Boot BOM 관리)
+    implementation("org.springframework.security:spring-security-oauth2-jose")
 
     // 단위 테스트(외부 인프라 없음, G-D009): standalone MockMvc는 spring-test(spring-boot-starter-test)에 있다.
     testImplementation("org.springframework.boot:spring-boot-starter-security-test")

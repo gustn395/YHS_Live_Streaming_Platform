@@ -23,6 +23,19 @@ class MemberTest {
     }
 
     @Test
+    void pendingExpiresExactlyTwentyFourHoursAfterSignup() { // MB-D003, MB-T030
+        Member member = Member.registerLocal("tester01", "hash", "tester@example.com", "테스터");
+        java.time.Instant createdAt = java.time.Instant.parse("2026-11-26T00:00:00Z");
+        org.springframework.test.util.ReflectionTestUtils.setField(member, "createdAt", createdAt);
+
+        assertThat(member.isPendingExpired(createdAt.plus(java.time.Duration.ofHours(24)).minusMillis(1))).isFalse();
+        assertThat(member.isPendingExpired(createdAt.plus(java.time.Duration.ofHours(24)))).isTrue();
+
+        org.springframework.test.util.ReflectionTestUtils.setField(member, "accountStatus", AccountStatus.ACTIVE);
+        assertThat(member.isPendingExpired(createdAt.plus(java.time.Duration.ofDays(30)))).isFalse();
+    }
+
+    @Test
     void localMemberRequiresUsernameAndPasswordHash() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> Member.registerLocal(" ", "hash", "tester@example.com", "테스터"));

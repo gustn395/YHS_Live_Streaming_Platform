@@ -3,8 +3,10 @@ package com.yhs.livestreaming.member.out;
 import com.yhs.livestreaming.global.error.BusinessException;
 import com.yhs.livestreaming.member.app.MemberErrorCode;
 import com.yhs.livestreaming.member.app.MemberRepository;
+import com.yhs.livestreaming.member.domain.AccountStatus;
 import com.yhs.livestreaming.member.domain.AccountType;
 import com.yhs.livestreaming.member.domain.Member;
+import java.time.Instant;
 import java.util.Optional;
 import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -62,6 +64,26 @@ public class MemberRepositoryAdapter implements MemberRepository {
                     sqlState);
             throw new IllegalStateException("회원 저장 중 DB 제약 위반(" + (constraint.isEmpty() ? "unknown" : constraint) + ")");
         }
+    }
+
+    @Override
+    public Optional<Member> findByUsername(String username) {
+        return jpa.findByUsername(username);
+    }
+
+    @Override
+    public Optional<Member> findById(long id) {
+        return jpa.findById(id);
+    }
+
+    @Override
+    public int updatePasswordHash(long id, String expectedHash, String newHash, Instant now) {
+        return jpa.updatePasswordHash(id, expectedHash, newHash, now);
+    }
+
+    @Override
+    public int activatePending(long id, Instant createdAfter, Instant now) {
+        return jpa.activatePending(id, createdAfter, now, AccountStatus.PENDING, AccountStatus.ACTIVE);
     }
 
     private static BusinessException duplicate(MemberErrorCode errorCode) {

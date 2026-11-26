@@ -43,7 +43,7 @@ curl http://localhost:8080/actuator/health
 # {"groups":["liveness","readiness"],"status":"UP"}
 ```
 
-실행에는 PostgreSQL이 필요하다(접속 정보와 pepper 키는 4장 환경변수). 테스트는 Testcontainers로 PostgreSQL을 띄우므로 **Docker가 실행 중이어야 한다**([G-D009](../docs/policy.md#3-공통-결정-이력)). 단위 테스트는 외부 인프라 없이 돈다. Redis는 아직 쓰지 않는다.
+실행에는 PostgreSQL·Redis·SMTP 서버가 필요하다(접속 정보와 키는 4장 환경변수). 개발용 SMTP는 Mailpit을 쓴다(`docker run -p 1025:1025 -p 8025:8025 axllent/mailpit`, 받은 메일은 http://localhost:8025). 테스트는 Testcontainers로 PostgreSQL·Redis·Mailpit을 띄우므로 **Docker가 실행 중이어야 한다**([G-D009](../docs/policy.md#3-공통-결정-이력)). 단위 테스트는 외부 인프라 없이 돈다.
 
 ### CI (GitHub Actions)
 
@@ -71,11 +71,21 @@ main 대상 PR, main push, 수동 실행(`workflow_dispatch`) 때 [`.github/work
 | `MEMBER_PASSWORD_PEPPER_KEY`, `MEMBER_PASSWORD_PEPPER_KEY_ID` | 없음 | 비밀번호 해시 pepper 키(SecureRandom 256bit를 Base64로)와 키 ID. 없거나 형식이 틀리면 기동 실패([MB-D007](../docs/member/decisions.md#1-확정-결정)) |
 | `MEMBER_PASSWORD_HIBP_BASE_URL` | `https://api.pwnedpasswords.com` | 유출 비밀번호 확인(HIBP range API) 주소. 서버에서 이 주소로 나가는 HTTPS 통신이 필요하고, 닿지 않으면 회원가입이 503이다([MB-D010](../docs/member/decisions.md#1-확정-결정)) |
 | `SPRINGDOC_ENABLED` | `false` | API 문서(`/v3/api-docs`)·Swagger UI 켜기. 개발·테스트에서만 `true`([G-D008](../docs/policy.md#3-공통-결정-이력)) |
+| `AUTH_JWT_KEY`, `AUTH_JWT_KEY_ID` | 없음 | Access Token(JWT HS256) 서명 키(SecureRandom 256bit, Base64)와 키 ID(`kid`). 없거나 형식이 틀리면 기동 실패([MB-D007](../docs/member/decisions.md#1-확정-결정), [MB-D012](../docs/member/decisions.md#1-확정-결정)) |
+| `MEMBER_OTP_HMAC_KEY`, `MEMBER_OTP_HMAC_KEY_ID` | 없음 | OTP HMAC 키(SecureRandom 256bit, Base64)와 키 ID. pepper·JWT 키와 다른 값. 없거나 형식이 틀리면 기동 실패([MB-D015](../docs/member/decisions.md#1-확정-결정)) |
+| `MEMBER_OTP_MAIL_FROM` | 없음 | OTP 메일 보내는 주소. 없으면 기동 실패([MB-D016](../docs/member/decisions.md#1-확정-결정)) |
+| `SPRING_DATA_REDIS_HOST`, `SPRING_DATA_REDIS_PORT`, `SPRING_DATA_REDIS_PASSWORD`, `SPRING_DATA_REDIS_SSL_ENABLED` | Boot 기본(localhost:6379), 비밀번호 없음 | Redis 접속(로그인 세션·OTP·요청 제한). 쓸 수 없으면 가입·로그인·OTP·세션 검증이 503([MB-D019](../docs/member/decisions.md#1-확정-결정)) |
+| `MEMBER_REDIS_TIMEOUT`, `MEMBER_REDIS_CONNECT_TIMEOUT` | `2s`, `1s` | Redis 명령·연결 타임아웃 |
+| `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` | 없음 | OTP 메일 SMTP. 개발은 Mailpit(`localhost:1025`, 계정 없음), 운영은 Gmail SMTP(`smtp.gmail.com:587`, 앱 비밀번호). 호스트가 없으면 기동 실패 |
+| `MEMBER_SMTP_AUTH`, `MEMBER_SMTP_STARTTLS` | 없음(필수) | SMTP 인증·STARTTLS. 개발(Mailpit) `false`, 운영(Gmail) **반드시 `true`**. `STARTTLS=true`면 TLS를 강제한다(`starttls.required`) |
+| `MEMBER_SMTP_CONNECT_TIMEOUT_MS`, `MEMBER_SMTP_READ_TIMEOUT_MS`, `MEMBER_SMTP_WRITE_TIMEOUT_MS` | `3000`, `5000`, `5000` | SMTP 타임아웃(ms). 자동 재시도 없음 |
+
+요청·로그인·OTP 제한 수치는 `member.limits.*` 설정으로 바꿀 수 있고 기본값이 정책 값이다([MB-D017](../docs/member/decisions.md#1-확정-결정), [MB-D018](../docs/member/decisions.md#1-확정-결정)). 요청 제한의 클라이언트 IP는 `getRemoteAddr()`만 쓴다. 리버스 프록시 뒤에 두면 모든 요청이 프록시 IP로 묶이므로 외부 공개 전에 [MB-U06](../docs/member/decisions.md#2-미결)을 정해야 한다.
 
 원칙:
 
 - 환경마다 다른 값은 `${ENV_NAME:기본값}`으로 받는다.
-- **비밀번호·토큰·키는 기본값 없이 환경변수로만 받고, 설정 파일과 Git에 적지 않는다.** (DB·Redis 설정은 해당 모듈을 구현할 때 이 원칙으로 추가한다)
+- **비밀번호·토큰·키는 기본값 없이 환경변수로만 받고, 설정 파일과 Git에 적지 않는다.**
 - Spring Boot는 저장소 루트의 `.env`를 자동으로 읽지 않는다. 실행하는 셸이나 IDE 실행 구성에서 환경변수를 넣는다.
 
 ```powershell
@@ -86,7 +96,7 @@ $env:BACKEND_PORT = "18080"; .\gradlew.bat :app:bootRun          # PowerShell
 BACKEND_PORT=18080 ./gradlew :app:bootRun                          # bash
 ```
 
-Actuator는 `health`만 웹에 노출하고 상세 정보(`show-details: never`)는 숨긴다. `/actuator/env` 등 다른 엔드포인트는 익명 요청이면 401, 인증된 요청이면 404다(테스트로 확인, [G-D011](../docs/policy.md#3-공통-결정-이력)).
+Actuator는 `health`만 웹에 노출하고 상세 정보(`show-details: never`)는 숨긴다. health는 DB·Redis를 확인하고, 메일(SMTP)은 확인하지 않는다(`management.health.mail.enabled=false`: 확인마다 Gmail에 접속하지 않으려고). `/actuator/env` 등 다른 엔드포인트는 익명 요청이면 401, 인증된 요청이면 404다(테스트로 확인, [G-D011](../docs/policy.md#3-공통-결정-이력)).
 
 ## 5. 모듈과 패키지 규칙
 
@@ -149,14 +159,16 @@ backend/
 
 ## 6. 의존성 도입 계획 (Q3)
 
-지금은 `spring-boot-starter-webmvc`, `spring-boot-starter-actuator`, `spring-boot-starter-tomcat-runtime`(providedRuntime), `spring-boot-starter-test`와 global 모듈의 `spring-boot-starter-security`·`-validation`·`-data-jpa`·springdoc, app의 `spring-boot-starter-flyway`·PostgreSQL 드라이버·`flyway-database-postgresql`, 테스트용 `spring-boot-starter-webmvc-test`(app)·`spring-boot-starter-security-test`(app, global)·`spring-boot-starter-data-jpa-test`(member)·`spring-boot-testcontainers`와 Testcontainers PostgreSQL(app, member)이 있다. 나머지는 아래 시점에 추가한다. 실행·테스트 클래스패스를 해석할 때 Boot·Framework 모듈 버전이 섞이면 실패한다([G-D012](../docs/policy.md#3-공통-결정-이력)). 이 검사는 IDE의 Gradle 동기화에도 똑같이 걸리므로, 동기화가 "Spring 버전 불일치"로 실패하면 메시지에 나온 의존성을 확인한다. 버전은 Spring Boot 4.1.3 BOM 기준이며, BOM이 관리하지 않는 것만 `gradle/libs.versions.toml`에 고정한다.
+지금은 `spring-boot-starter-webmvc`, `spring-boot-starter-actuator`, `spring-boot-starter-tomcat-runtime`(providedRuntime), `spring-boot-starter-test`와 global 모듈의 `spring-boot-starter-security`·`-validation`·`-data-jpa`·springdoc·`spring-security-oauth2-jose`, member 모듈의 `spring-boot-starter-data-redis`·`-mail`, app의 `spring-boot-starter-flyway`·PostgreSQL 드라이버·`flyway-database-postgresql`, 테스트용 `spring-boot-starter-webmvc-test`(app)·`spring-boot-starter-security-test`(app, global)·`spring-boot-starter-data-jpa-test`(member)·`spring-boot-testcontainers`와 Testcontainers PostgreSQL(app, member)·`spring-boot-starter-data-redis-test`(member)·Redis 테스트용 `spring-boot-starter-data-redis`(app)가 있다. 나머지는 아래 시점에 추가한다. 실행·테스트 클래스패스를 해석할 때 Boot·Framework 모듈 버전이 섞이면 실패한다([G-D012](../docs/policy.md#3-공통-결정-이력)). 이 검사는 IDE의 Gradle 동기화에도 똑같이 걸리므로, 동기화가 "Spring 버전 불일치"로 실패하면 메시지에 나온 의존성을 확인한다. 버전은 Spring Boot 4.1.3 BOM 기준이며, BOM이 관리하지 않는 것만 `gradle/libs.versions.toml`에 고정한다.
 
 | 기술 | 도입 시점 | 버전 (4.1.3 기준) | 주의 |
 | --- | --- | --- | --- |
 | JPA (Hibernate), PostgreSQL | 첫 엔티티 (Member, BE-02, 도입함) | Hibernate 7.4.15, JDBC 42.7.14 (BOM) | 넣으면 DataSource 자동 설정 때문에 DB 없이 실행되지 않는다. 테스트는 Testcontainers([G-D009](../docs/policy.md#3-공통-결정-이력)), 공통 설정 위치는 [G-D010](../docs/policy.md#3-공통-결정-이력) |
 | Flyway | 첫 테이블 (BE-02, 도입함) | 12.4.0 (BOM) | PostgreSQL은 `flyway-database-postgresql` 모듈도 필요. 마이그레이션은 각 모듈 `db/migration`, 버전은 날짜형 `V<yyyymmdd>_<순번>` |
 | Spring Security | global 공통 기반 (Issue #8) | 7.1.3 (BOM) | 넣으면 모든 URL에 인증이 걸린다. 기본 체인은 [G-D004](../docs/policy.md#3-공통-결정-이력), 인증 방식은 [MB-D002](../docs/member/decisions.md#1-확정-결정) |
-| Redis | 세션·OTP | Lettuce 7.5.2 (BOM) | |
+| Redis | 세션·OTP (BE-03, 도입함: member `spring-boot-starter-data-redis`) | Lettuce 7.5.2 (BOM) | 테스트는 Testcontainers `redis:7.4-alpine`. 원자 처리는 Lua 스크립트(`member/src/main/resources/redis/member`) |
+| Spring Security JOSE(Nimbus) | Access Token JWT (BE-03, 도입함: global `spring-security-oauth2-jose`) | Security 7.1.3 / nimbus-jose-jwt 10.9.1 (BOM) | resource-server 스타터는 쓰지 않는다(쿠키 인증 필터를 직접 둔다, [MB-D012](../docs/member/decisions.md#1-확정-결정)) |
+| Spring Mail | OTP 메일 (BE-03, 도입함: member `spring-boot-starter-mail`) | Angus Mail 2.0.5 (BOM) | 테스트는 대역 + Mailpit 컨테이너(`axllent/mailpit:v1.21.0`) |
 | springdoc OpenAPI | global 공통 기반 (Issue #8) | 3.1.1 (Boot 4.1.0으로 빌드된 릴리스) — BOM 미관리, `libs.versions.toml` | Boot 3용 2.x, Boot 4.2용 3.2.x는 쓸 수 없다(4.2.x 모듈을 끌어와 버전이 섞인다). 운영 기본 비활성([G-D008](../docs/policy.md#3-공통-결정-이력), [G-D012](../docs/policy.md#3-공통-결정-이력)) |
 | JSP / JSTL | 관리자 화면 | Jasper 11.0.27, JSTL API 3.0.2, 구현체 3.0.1 (BOM) | 7장 확인 결과 참고 |
 | WebSocket / STOMP | Chat | `spring-boot-starter-websocket` (BOM) | |
