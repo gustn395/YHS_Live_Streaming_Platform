@@ -1,9 +1,11 @@
-# 백엔드 CI: 전체 Gradle 모듈 빌드·테스트, 테스트 리포트·WAR 업로드
-# 정책과 검증 기록: docs/testing/step4-ci-coderabbit.md
+# 백엔드 CI: 변경 감지 → (Backend 변경 시) 전체 Gradle 모듈 빌드·테스트, 테스트 리포트·WAR 업로드 → 최종 Gate
+# 정책과 검증 기록: docs/testing/step4-ci-coderabbit.md(빌드·Artifact), docs/testing/fe02-ci-split.md(감지·Gate·Ruleset)
 #
-# - paths 필터를 두지 않는다. main Ruleset의 필수 체크(backend-build)가 건너뛰어지면 PR이 병합 대기 상태로 남는다.
+# - paths 필터를 두지 않는다. 항상 실행하고 감지 Job이 build 실행 여부를 정한다.
+#   main Ruleset 필수 체크는 전환 절차(fe02-ci-split.md 5장)를 거쳐 backend-build에서 Gate Job(backend-ci)으로 바뀐다.
 # - Action은 커밋 SHA로 고정하고 태그를 주석으로 남긴다. 출시 후 14일 이상 지난 안정 버전만 쓴다.
 # - DB·Redis·MediaMTX 없이 동작한다. 서비스 컨테이너를 두지 않는다.
+# - PR에서 온 값은 action 입력·env로만 넘기고 run 본문에 직접 넣지 않는다.
 name: Backend CI
 
 on:
@@ -22,9 +24,34 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    name: backend-changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.detect.outputs.backend }}
+      frontend: ${{ steps.detect.outputs.frontend }}
+      mode: ${{ steps.detect.outputs.mode }}
+      reason: ${{ steps.detect.outputs.reason }}
+    steps:
+      - name: Checkout (full history for merge-base)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect changes
+        id: detect
+        uses: ./.github/actions/detect-changes
+        with:
+          base-sha: ${{ github.event.pull_request.base.sha }}
+          head-sha: ${{ github.event.pull_request.head.sha }}
+
   build:
-    # 이 이름이 main Ruleset의 Required status check 이름이다. 바꾸면 Ruleset도 함께 바꾼다.
+    # Job 이름은 Step 4 이후 그대로 둔다(Ruleset 전환 전 보호와 복구 절차가 이 이름을 쓴다).
     name: backend-build
+    needs: changes
+    if: ${{ needs.changes.outputs.backend == 'run' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
@@ -75,3 +102,29 @@ jobs:
             !backend/app/build/libs/*-plain.war
           retention-days: 7
           if-no-files-found: error
+
+  gate:
+    # 이 이름을 main Ruleset의 Required status check로 등록한다(전환 절차: fe02-ci-split.md 5장). 바꾸면 Ruleset도 함께 바꾼다.
+    # always(): 감지·build가 실패·취소돼도 Gate가 실행돼 FAILED를 남긴다(건너뛴 체크는 통과로 취급되기 때문).
+    name: backend-ci
+    needs: [changes, build]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (.github only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github
+
+      - name: Gate
+        uses: ./.github/actions/ci-gate
+        with:
+          area: backend
+          changes-result: ${{ needs.changes.result }}
+          backend-target: ${{ needs.changes.outputs.backend }}
+          frontend-target: ${{ needs.changes.outputs.frontend }}
+          mode: ${{ needs.changes.outputs.mode }}
+          reason: ${{ needs.changes.outputs.reason }}
+          build-result: ${{ needs.build.result }}

@@ -88,6 +88,7 @@
 ### 4.1 적용 후 (2026-11-25 확인)
 
 비인증 API `GET /repos/<owner>/<repo>/rules/branches/main`, `GET /repos/<owner>/<repo>/rulesets/28061569`과 사용자 화면 확인으로 기록했다.
+아래 필수 체크(`backend-build`)는 이 시점의 기록이다. 이후 필수 체크 전환은 [fe02-ci-split.md](fe02-ci-split.md) 5·6장에 기록한다.
 
 | 항목 | 상태 | 근거 |
 | --- | --- | --- |

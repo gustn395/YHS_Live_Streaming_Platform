@@ -168,3 +168,16 @@
 
 - M-01은 XSRF 설정을 바꾸지 않아 다시 실행하지 않았다(19:27 결과 유지).
 
+### 2026-11-26 FE-02(Issue #16) Frontend CI 구성 — 브랜치 `feature/16-frontend-ci-split`, 기준 커밋 b236ffd + 작업 트리(커밋 전)
+
+frontend 코드·의존성 변경 없음. Frontend CI가 실행할 명령(FE-T001, FE-T018)과 audit 판정을 로컬에서 확인했다. Node v24.19.0, npm 11.17.0.
+
+| 명령 | 결과 |
+| --- | --- |
+| `npm ci` · `npm run lint` · `npm run typecheck` | exit 0 · exit 0 · exit 0 (`npm ci` audit 경고 moderate 9, FE-D015) |
+| `npm test` | exit 0, 17파일 218건 통과 |
+| `npm run build` | exit 0, `check-dist: 가안 표지 없음` |
+| `npm audit --omit=dev --audit-level=high --json` → `npm_audit_report.py --mode blocking` | npm exit 0, 판정 PASS(운영 의존성 취약점 0건) |
+| `npm audit --json` → `npm_audit_report.py --mode report` | npm exit 1, 판정 FOUND(moderate 9건, 비차단, FE-D015) |
+
+- GitHub Actions 실행(FE-T018 실검증)은 PR 이후다. 결과는 [fe02-ci-split.md](../testing/fe02-ci-split.md) 6장에 기록한다.

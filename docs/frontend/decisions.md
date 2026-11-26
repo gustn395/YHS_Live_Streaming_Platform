@@ -25,6 +25,9 @@ frontend 결정 이력·이유·미결의 원본이다. 현재 유효한 업무 
 | FE-D014 | XSRF: [G-U02](../policy.md#4-공통-미결) 확정 전까지 Axios의 XSRF 자동 처리를 명시적으로 끈다. 선정 버전의 공식 문서와 실제 동작을 기준으로 삼고, XSRF 쿠키가 있어도 헤더가 붙지 않는지 검증한다. 검증은 jsdom 자동 테스트와 실제 브라우저 수동 확인으로 하고 결과를 구분해 기록한다. 수동 확인을 하지 않았으면 PASS로 기록하지 않으며, 영구 검증 페이지나 Mock 경로를 추가하지 않는다. Backend CSRF 설정은 바꾸지 않는다. 확정 뒤 바꿀 수 있게 둔다([FE-U04](#2-미결)). | CSRF 방식이 미결([G-D005](../policy.md#3-공통-결정-이력))인 동안 정해지지 않은 헤더를 보내지 않는다. Node 테스트만으로는 브라우저 동작을 보장할 수 없다. | FE 3차 Q1·보완, FE 4차 Q3·보완, 2026-11-26 |
 | FE-D015 | lint 도구 체인의 `minimatch` 권고([GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249), moderate, `>=7.0.0 <11.0.1`)는 FE-01에서 위험을 수용한다. `eslint` 10.14.0·`typescript-eslint` 8.72.2를 유지하고, audit 결과는 미해결로 [regression-log.md](regression-log.md)에 그대로 기록한다. 수정 버전(`eslint` 10.15.0, `typescript-eslint` 8.74.0)이 공개 14일을 넘긴 뒤(2026-12-07 이후) 별도 작업에서 올린다. 14일 예외와 `overrides` 강제는 쓰지 않는다. | 영향 패키지는 개발 전용 lint 체인이고 운영 번들에 포함되지 않으며, glob 패턴은 저장소 설정이 정한다. 수정 버전은 공개 14일 미만이라 [FE-D008](#1-확정-결정) 예외가 필요하다. | FE-01 구현 중 의존성 설치 전 재검증 질문 Q1, 2026-11-26 |
 | FE-D016 | 인증 초기화가 결과(인증·미인증)로 끝난 뒤에는 adapter 등이 바뀌어도 다시 초기화하지 않는다. 초기화가 끝나기 전의 adapter 교체는 새 adapter로 다시 시작하고, 오류(initError) 뒤 재시도는 허용한다. 로그아웃·재로그인으로 상태를 다시 여는 방법은 BE-03 계약 뒤 [FE-U02](#2-미결)와 함께 다시 검토한다. | 초기화가 끝난 뒤 다시 초기화하면 Reducer는 결과를 버리지만 세대 관리(scope)는 세대를 올려 둘이 어긋나고, 세션 상실 401이 반영되지 않는다([FE-D011](#1-확정-결정)). 운영은 미연결 어댑터로 고정이라 교체가 필요 없다. | FE-01 CodeRabbit 리뷰 반영 질문 Q1, 2026-11-26 |
+| FE-D017 | Frontend CI의 의존성 감사: `npm audit --omit=dev --audit-level=high`가 실패하면 CI를 막는다. 전체 audit(개발 의존성 포함)은 결과를 Step Summary에 남기되 막지 않는다. [FE-D015](#1-확정-결정)의 위험 수용은 유지한다. audit 실행 오류는 취약점 발견과 구분해 기록하고, 미실행·오류를 0건으로 기록하지 않는다. `npm audit fix`는 CI에서 쓰지 않는다. `--omit=dev`는 운영 의존성 트리만 감사할 뿐 번들에 실제로 들어간 코드를 분석하지 않는다. | 운영 의존성의 high 이상 권고만 병합을 막고, 개발 전용 lint 체인 권고(FE-D015)는 보이게만 둔다. 실행 오류를 "취약점 없음"으로 오인하지 않게 한다. | FE-02 1차 Q5·보완, 2026-11-26 |
+| FE-D018 | Frontend CI는 Artifact를 올리지 않는다. 결과는 Job 로그와 Step Summary로 남긴다. `dist` 업로드는 운영 제공 방식([FE-U01](#2-미결))을 정할 때 다시 검토한다. Backend Artifact 정책([Step 4 Q2](../testing/step4-ci-coderabbit.md#1-결정-사항))은 그대로다. | 아직 `dist`를 받아 쓰는 곳이 없다. | FE-02 2차 Q4·보완, 2026-11-26 |
+| FE-D019 | 차단 audit([FE-D017](#1-확정-결정))이 실행 오류로 끝나면 Frontend CI를 막는다(fail-closed). 사유는 `AUDIT_ERROR`로 표시해 취약점 발견(`AUDIT_VULN`)과 구분한다. JSON이 아니거나, `error`를 보고했거나, 필수 필드(`auditReportVersion`, `metadata.vulnerabilities`의 심각도별 건수·`total`)가 없거나 값이 잘못됐거나, 종료 코드와 건수가 맞지 않으면 실행 오류다. 자동 재시도는 하지 않는다. | 감사하지 않은 상태로 병합하지 않는다. 실행하지 않은 build를 성공으로 처리하지 않는 Gate 정책([fe02-ci-split.md](../testing/fe02-ci-split.md#1-결정-사항) Q6·Q12)과 같은 방향이다. 일시 장애는 Re-run으로 해소한다. | FE-02 ④ 계획 추가 Q1, 2026-11-26 |
 
 ## 2. 미결
 
@@ -36,8 +39,9 @@ frontend 결정 이력·이유·미결의 원본이다. 현재 유효한 업무 
 | FE-U04 | XSRF 자동 처리 활성화 방식 | 미결 | FE 3차 Q1. 결정 시점: [G-U02](../policy.md#4-공통-미결) 확정 뒤 |
 | FE-U05 | React Router v8 이전 | 미결 | FE 4차 Q4. 결정 시점: 별도 작업 |
 | FE-U06 | TanStack Query 도입 | 미결 (보류) | FE 2차 Q5. 결정 시점: 실제 조회 화면 FE 작업 |
-| FE-U07 | E2E 테스트 도구와 Frontend CI | 미결 | FE 1차 Q3, FE 2차 Q2. 결정 시점: 화면이 생기는 FE 작업 |
+| FE-U07 | E2E 테스트 도구와 Frontend CI | 확정 (Frontend CI: [fe02-ci-split.md](../testing/fe02-ci-split.md#1-결정-사항) Q4, FE-D017·FE-D018). E2E는 [FE-U09](#2-미결)로 분리 | FE 1차 Q3, FE 2차 Q2. 분리: FE-02 1차 Q6, 2026-11-26 |
 | FE-U08 | OTP 대기 상태 표현 | 미결 | FE 2차 Q7. 결정 시점: Backend 계약(BE-03) 확정 뒤 |
+| FE-U09 | E2E 테스트 도구 | 미결 | FE-U07에서 분리(FE-02 1차 Q6). 결정 시점: 화면이 생기는 FE 작업 |
 
 ## 3. 변경 이력
 
@@ -46,3 +50,5 @@ frontend 결정 이력·이유·미결의 원본이다. 현재 유효한 업무 
 | 2026-11-26 | FE-D001~FE-D014, FE-U01~FE-U08 기록(Issue #11, FE-01 정책 1~4차) |
 | 2026-11-26 | FE-D015 기록(FE-01 구현 중 설치 전 재검증, lint 체인 audit 위험 수용) |
 | 2026-11-26 | FE-D016 기록(FE-01 CodeRabbit 리뷰 반영, 초기화 완료 뒤 재초기화 안 함) |
+| 2026-11-26 | FE-D017·FE-D018 기록, FE-U07 분리·FE-U09 신설(Issue #16, FE-02 정책 1·2차) |
+| 2026-11-26 | FE-D019 기록(Issue #16, 차단 audit 실행 오류 fail-closed) |
