@@ -1,0 +1,47 @@
+# BE·FE CI 공통 변경 감지: CI 스크립트 unittest를 먼저 실행하고(실패·0건이면 이 단계가 실패) 변경 경로를 분류한다.
+# 정책: docs/testing/fe02-ci-split.md. 분류 규칙은 .github/ci/detect_changes.py 한 곳에만 둔다.
+# PR에서 온 값은 env로만 넘기고 run 본문에 직접 넣지 않는다.
+name: Detect changes
+description: CI 스크립트 unittest 실행 뒤 Backend·Frontend 실행 여부를 판정한다
+
+inputs:
+  base-sha:
+    description: pull_request의 base SHA (그 밖의 이벤트는 빈 값)
+    required: false
+    default: ''
+  head-sha:
+    description: pull_request의 head SHA (그 밖의 이벤트는 빈 값)
+    required: false
+    default: ''
+
+outputs:
+  backend:
+    description: run 또는 skip
+    value: ${{ steps.detect.outputs.backend }}
+  frontend:
+    description: run 또는 skip
+    value: ${{ steps.detect.outputs.frontend }}
+  mode:
+    description: NORMAL, FALLBACK, FULL
+    value: ${{ steps.detect.outputs.mode }}
+  reason:
+    description: 판정 사유 토큰
+    value: ${{ steps.detect.outputs.reason }}
+
+runs:
+  using: composite
+  steps:
+    - name: Unit tests for CI scripts
+      shell: bash
+      run: |
+        python3 --version
+        python3 -B -I "$GITHUB_WORKSPACE/.github/ci/run_tests.py"
+
+    - name: Detect changed areas
+      id: detect
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        BASE_SHA: ${{ inputs.base-sha }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+      run: python3 -B -I "$GITHUB_WORKSPACE/.github/ci/detect_changes.py"

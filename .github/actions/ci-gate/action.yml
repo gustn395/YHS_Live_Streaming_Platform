@@ -1,0 +1,42 @@
+# CI 최종 Gate: BE·FE 양쪽 감지 출력의 조합을 확인한 뒤 자기 영역의 build 결과를 판정한다.
+# 정책: docs/testing/fe02-ci-split.md (Gate 판정표). 값은 env로만 넘긴다.
+name: CI gate
+description: 변경 감지 출력과 build 결과로 NORMAL·SKIPPED·FALLBACK·FULL·FAILED를 판정한다
+
+inputs:
+  area:
+    description: backend 또는 frontend
+    required: true
+  changes-result:
+    description: needs.<changes>.result
+    required: true
+  backend-target:
+    description: 감지 출력 backend
+    required: true
+  frontend-target:
+    description: 감지 출력 frontend
+    required: true
+  mode:
+    description: 감지 출력 mode
+    required: true
+  reason:
+    description: 감지 출력 reason
+    required: true
+  build-result:
+    description: needs.<build>.result
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Judge gate
+      shell: bash
+      env:
+        GATE_AREA: ${{ inputs.area }}
+        CHANGES_RESULT: ${{ inputs.changes-result }}
+        BACKEND_TARGET: ${{ inputs.backend-target }}
+        FRONTEND_TARGET: ${{ inputs.frontend-target }}
+        DETECT_MODE: ${{ inputs.mode }}
+        DETECT_REASON: ${{ inputs.reason }}
+        BUILD_RESULT: ${{ inputs.build-result }}
+      run: python3 -B -I "$GITHUB_WORKSPACE/.github/ci/gate.py"

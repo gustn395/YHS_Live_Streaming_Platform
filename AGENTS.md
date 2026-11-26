@@ -24,7 +24,8 @@
 - `main` + `feature/<Issue 번호>-<module 또는 영역>-<요지>`. Issue를 먼저 만들고 그 번호로 브랜치를 만든다
   ([Step 4.5 Q7](docs/testing/step4-5-agent-harness.md#1-결정)).
 - `main`에는 PR로만, Squash Merge로 병합한다. Ruleset 결정은 [step4 문서](docs/testing/step4-ci-coderabbit.md) 1장 Q3, 적용 확인은
-  같은 문서 4.1절이다.
+  같은 문서 4.1절이다. 필수 체크를 Gate `backend-ci`·`frontend-ci`로 바꾸는 전환·복구 절차와 적용 기록은 [FE-02 문서](docs/testing/fe02-ci-split.md)
+  1장 Q5·5장이다.
 
 ## 정책과 결정
 

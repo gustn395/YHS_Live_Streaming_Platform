@@ -1,0 +1,133 @@
+# 프론트엔드 CI: 변경 감지 → (Frontend 변경 시) npm ci·lint·typecheck·test·build·npm audit → 최종 Gate
+# 정책과 검증 기록: docs/testing/fe02-ci-split.md, docs/frontend/decisions.md(FE-D017·FE-D018·FE-D019), test-spec FE-T018
+#
+# - paths 필터를 두지 않는다. Gate Job(frontend-ci)을 전환 절차(fe02-ci-split.md 5장)로 main Ruleset 필수 체크에 등록한다.
+# - Action은 커밋 SHA로 고정하고 태그를 주석으로 남긴다. 출시 후 14일 이상 지난 안정 버전만 쓴다.
+# - Backend 서버 없이 동작한다. Artifact를 올리지 않는다(FE-D018).
+# - npm 캐시는 lockfile 해시 키의 npm 전역 캐시만 쓴다. node_modules는 캐시하지 않고 npm ci를 매번 실행한다.
+# - PR에서 온 값은 action 입력·env로만 넘기고 run 본문에 직접 넣지 않는다.
+name: Frontend CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-ci-${{ github.event.pull_request.number || github.ref }}
+  # PR은 새 커밋이 오면 이전 실행을 취소한다. main push는 취소하지 않는다.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    name: frontend-changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.detect.outputs.backend }}
+      frontend: ${{ steps.detect.outputs.frontend }}
+      mode: ${{ steps.detect.outputs.mode }}
+      reason: ${{ steps.detect.outputs.reason }}
+    steps:
+      - name: Checkout (full history for merge-base)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect changes
+        id: detect
+        uses: ./.github/actions/detect-changes
+        with:
+          base-sha: ${{ github.event.pull_request.base.sha }}
+          head-sha: ${{ github.event.pull_request.head.sha }}
+
+  build:
+    name: frontend-build
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'run' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          # 자동 캐시 감지는 끄고, lockfile 기반 npm 캐시를 명시한다.
+          package-manager-cache: false
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install (npm ci)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Audit production dependencies (blocking, FE-D017·FE-D019)
+        run: |
+          set +e
+          npm audit --omit=dev --audit-level=high --json > "$RUNNER_TEMP/audit-prod.json"
+          echo "$?" > "$RUNNER_TEMP/audit-prod.exit"
+          set -e
+          python3 -B -I "$GITHUB_WORKSPACE/.github/ci/npm_audit_report.py" --mode blocking \
+            --json-file "$RUNNER_TEMP/audit-prod.json" --exit-code-file "$RUNNER_TEMP/audit-prod.exit"
+
+      - name: Audit all dependencies (report only)
+        # 막지 않는다. 앞 단계가 실패해도 결과를 남긴다. 취소된 실행만 건너뛴다.
+        if: ${{ !cancelled() }}
+        run: |
+          set +e
+          npm audit --json > "$RUNNER_TEMP/audit-all.json"
+          echo "$?" > "$RUNNER_TEMP/audit-all.exit"
+          set -e
+          python3 -B -I "$GITHUB_WORKSPACE/.github/ci/npm_audit_report.py" --mode report \
+            --json-file "$RUNNER_TEMP/audit-all.json" --exit-code-file "$RUNNER_TEMP/audit-all.exit"
+
+  gate:
+    # 이 이름을 main Ruleset의 Required status check로 등록한다(전환 절차: fe02-ci-split.md 5장). 바꾸면 Ruleset도 함께 바꾼다.
+    # always(): 감지·build가 실패·취소돼도 Gate가 실행돼 FAILED를 남긴다(건너뛴 체크는 통과로 취급되기 때문).
+    name: frontend-ci
+    needs: [changes, build]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (.github only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github
+
+      - name: Gate
+        uses: ./.github/actions/ci-gate
+        with:
+          area: frontend
+          changes-result: ${{ needs.changes.result }}
+          backend-target: ${{ needs.changes.outputs.backend }}
+          frontend-target: ${{ needs.changes.outputs.frontend }}
+          mode: ${{ needs.changes.outputs.mode }}
+          reason: ${{ needs.changes.outputs.reason }}
+          build-result: ${{ needs.build.result }}

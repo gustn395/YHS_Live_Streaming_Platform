@@ -25,9 +25,10 @@
 | FE-T015 | 운영 어댑터 안전성 | 운영 어댑터는 네트워크 호출 없이 항상 미인증이고 인증 성공 경로가 없다. 빌드 결과에 가안 표지 문자열과 `src/test` 모듈이 없다 | FE-D005 | `AuthProvider.test.tsx`(운영 어댑터), `forbidTestModules.test.ts`, `checkDist.test.ts`, `npm run build`의 checkDist |
 | FE-T016 | 의존 방향 lint | 의존 방향 규칙(`axios` import 위치, `src/test` import 금지 등)이 위반 예시에서 실패한다 | FE-D005, FE-D013 | `eslintBoundaries.test.ts` |
 | FE-T017 | Reducer 순수성 | 같은 입력에 같은 출력. 부수 효과 Mock이 호출되지 않는다 | FE-D009 | `authState.test.ts`(순수성) |
+| FE-T018 | Frontend CI | Frontend 변경이 있으면 `frontend-ci` Workflow가 `npm ci`·lint·typecheck·test·build와 FE-D017 audit을 실행하고, 하나라도 실패하면 Gate `frontend-ci`가 실패한다. audit 실행 오류는 `AUDIT_ERROR`로 실패한다. Backend 서버 없이 통과한다. Artifact를 올리지 않는다. 공통 감지·Gate 시나리오는 [fe02-ci-split.md](../testing/fe02-ci-split.md)가 원본이다 | FE-D017, FE-D018, FE-D019, FE-T001 | `.github/workflows/frontend-ci.yml`, `.github/ci/tests/test_npm_audit_report.py`(저장소 루트 기준), GitHub Actions 실행(fe02-ci-split.md 4장 L3·L4) |
 | M-01 | XSRF 실제 브라우저 수동 확인 | 개발 서버에서 `XSRF-TOKEN` 쿠키를 둔 채 Client 요청을 보내 Network 탭에 `X-XSRF-TOKEN` 헤더가 없음을 확인한다. 자동 결과와 구분해 기록하고, 하지 않았으면 PASS로 적지 않는다. 운영 빌드에서는 확인할 수 없다는 한계를 함께 적는다 | FE-D014 | 수동 |
 
 ## 2. 집계
 
-- 요구사항 17건(FE-T001~FE-T017) + 수동 1건(M-01). Vitest 17파일 218건(shared/api 85, features/auth 86, app 8, src/test 25, scripts 14).
+- 요구사항 18건(FE-T001~FE-T018, FE-T018의 GitHub 실행 검증은 PR 이후) + 수동 1건(M-01). Vitest 17파일 218건(shared/api 85, features/auth 86, app 8, src/test 25, scripts 14).
   FE-T001은 명령 실행으로 검증한다. 실행 결과는 [regression-log.md](regression-log.md).

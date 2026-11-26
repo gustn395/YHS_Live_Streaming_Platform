@@ -47,7 +47,7 @@ curl http://localhost:8080/actuator/health
 
 ### CI (GitHub Actions)
 
-main 대상 PR, main push, 수동 실행(`workflow_dispatch`) 때 [`.github/workflows/backend-ci.yml`](../.github/workflows/backend-ci.yml)이 Ubuntu + Temurin 17에서 위 `./gradlew clean build`를 그대로 실행한다. Job 이름 `backend-build`는 main의 필수 체크다. 테스트 리포트(`test-reports`)는 실패해도 올라가고, 실행 가능한 WAR(`backend-war`)는 성공할 때만 올라간다. 정책·버전·검증 기록은 [`docs/testing/step4-ci-coderabbit.md`](../docs/testing/step4-ci-coderabbit.md)에 있다.
+main 대상 PR, main push, 수동 실행(`workflow_dispatch`) 때 [`.github/workflows/backend-ci.yml`](../.github/workflows/backend-ci.yml)이 실행된다. 변경 감지 Job(`backend-changes`)이 Backend 변경이 있다고 판정하면 `backend-build` Job이 Ubuntu + Temurin 17에서 위 `./gradlew clean build`를 그대로 실행하고, 최종 Gate Job `backend-ci`가 결과를 판정한다. main Ruleset의 필수 체크는 전환 절차를 거쳐 `backend-build`에서 Gate `backend-ci`·`frontend-ci`로 바뀐다(감지·Gate·전환 절차와 기록은 [`docs/testing/fe02-ci-split.md`](../docs/testing/fe02-ci-split.md)). 테스트 리포트(`test-reports`)는 실패해도 올라가고, 실행 가능한 WAR(`backend-war`)는 성공할 때만 올라간다. 정책·버전·검증 기록은 [`docs/testing/step4-ci-coderabbit.md`](../docs/testing/step4-ci-coderabbit.md)에 있다.
 
 ## 3. WAR
 

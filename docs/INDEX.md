@@ -12,6 +12,7 @@
 | [GLOSSARY.md](GLOSSARY.md) | 두 모듈 이상이 쓰는 용어 |
 | [testing/step4-ci-coderabbit.md](testing/step4-ci-coderabbit.md) | Step 4 CI·CodeRabbit·Ruleset 결정 Q1~Q7과 검증 |
 | [testing/step4-5-agent-harness.md](testing/step4-5-agent-harness.md) | Step 4.5 Agent Harness·문서 구조 결정과 검증 |
+| [testing/fe02-ci-split.md](testing/fe02-ci-split.md) | FE-02 Frontend CI·Backend/Frontend CI 독립성·Ruleset 전환 결정 Q1~Q12와 검증 |
 | [testing/poc-mediamtx-webrtc.md](testing/poc-mediamtx-webrtc.md) | MediaMTX WebRTC 송출·시청 POC 기록 |
 
 | 모듈 | 접두어 | 문서 | 모듈 규칙 |
@@ -49,6 +50,7 @@
 | Step 3 결정 Q1~Q10 | `backend/README.md` 9장 | 옮기지 않고 링크한다 |
 | Step 4 결정 Q1~Q7 | `docs/testing/step4-ci-coderabbit.md` 1장 | 옮기지 않고 링크한다 |
 | Step 4.5 결정 | `docs/testing/step4-5-agent-harness.md` 1장 | 옮기지 않고 링크한다 |
+| FE-02 공통 CI 결정·검증 | `docs/testing/fe02-ci-split.md` 1장 | 옮기지 않고 링크한다. Frontend 전용 결정은 `docs/frontend/decisions.md` |
 
 ## 3. ID 체계
 
