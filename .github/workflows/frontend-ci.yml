@@ -44,7 +44,7 @@ jobs:
         id: detect
         uses: ./.github/actions/detect-changes
         with:
-          base-sha: ${{ github.event.pull_request.base.sha }}
+          base-sha: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef # L3-3 임시: 없는 SHA로 실제 git 실패 재현 — 원복 예정
           head-sha: ${{ github.event.pull_request.head.sha }}
 
   build:
