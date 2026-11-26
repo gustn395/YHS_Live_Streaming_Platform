@@ -6,7 +6,7 @@ const ORIGIN = 'http://localhost:3000';
 // FE-T012(일부): 로그인 뒤 돌아갈 from은 안전한 내부 경로만 허용한다(FE-D012)
 describe('safeRedirect', () => {
   it.each([
-    ['/app', '/app-l3-4b'], // L3-4b 임시 실패 주입 — 원복 예정
+    ['/app', '/app'],
     ['/app/settings?tab=1#top', '/app/settings?tab=1#top'],
     ['/app/%ED%95%9C', '/app/%ED%95%9C'],
   ])('허용: %s', (from, expected) => {
