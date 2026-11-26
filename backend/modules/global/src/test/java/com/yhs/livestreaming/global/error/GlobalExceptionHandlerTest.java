@@ -155,6 +155,17 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void controllerReturnValueConstraintViolationIsServerError() throws Exception { // GL-T005: MVC 반환값 검증 실패
+        mockMvc.perform(get("/return-blank"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("COMMON_INTERNAL_ERROR"))
+                .andExpect(jsonPath("$.detail").value("서버 오류가 발생했습니다."))
+                .andExpect(jsonPath("$.errors").doesNotExist())
+                .andExpect(content().string(not(containsString("returnBlank"))));
+    }
+
+    @Test
     void beanConstraintViolationOutsideMethodParametersIsServerError() throws Exception { // GL-T005: 저장 직전 검증 등
         mockMvc.perform(get("/bean-violation"))
                 .andExpect(status().isInternalServerError())
@@ -233,6 +244,12 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/param")
         String param(@RequestParam @Min(1) int size) {
             return String.valueOf(size);
+        }
+
+        @GetMapping("/return-blank")
+        @NotBlank
+        String returnBlank() {
+            return " ";
         }
 
         @GetMapping("/parameter-violation")

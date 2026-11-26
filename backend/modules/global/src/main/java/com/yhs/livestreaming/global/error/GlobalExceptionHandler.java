@@ -43,6 +43,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private static final String CODE = "code";
     private static final String AUTHENTICATION_REQUIRED = "인증이 필요합니다.";
+    private static final String INTERNAL_ERROR_DETAIL = "서버 오류가 발생했습니다.";
 
     private final AuthenticationTrustResolver trustResolver = new AuthenticationTrustResolverImpl();
 
@@ -75,7 +76,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> handleUnexpected(Exception ex) {
         log.error("처리하지 않은 예외", ex);
-        return problem(CommonErrorCode.INTERNAL_ERROR, "서버 오류가 발생했습니다.");
+        return problem(CommonErrorCode.INTERNAL_ERROR, INTERNAL_ERROR_DETAIL);
     }
 
     /** {@code @Valid @RequestBody} 검증 실패. */
@@ -89,12 +90,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return handleExceptionInternal(ex, invalidInput(errors), headers, HttpStatus.BAD_REQUEST, request);
     }
 
-    /** {@code @RequestParam}·{@code @PathVariable} 등에 붙인 제약의 메서드 검증 실패(Spring 6.1+). */
+    /**
+     * 컨트롤러 메서드 검증 실패(Spring 6.1+). {@code @RequestParam}·{@code @PathVariable} 등 입력값 위반은 400이다.
+     * 컨트롤러 반환값 위반({@code isForReturnValue()})은 서버가 만든 값의 문제라 500으로 처리한다(GL-T005).
+     */
     @Override
     protected ResponseEntity<Object> handleHandlerMethodValidationException(HandlerMethodValidationException ex,
                                                                             HttpHeaders headers,
                                                                             HttpStatusCode status,
                                                                             WebRequest request) {
+        if (ex.isForReturnValue()) {
+            log.error("컨트롤러 반환값 검증 실패", ex);
+            ErrorCode internalError = CommonErrorCode.INTERNAL_ERROR;
+            return handleExceptionInternal(ex, problemBody(internalError, INTERNAL_ERROR_DETAIL), headers,
+                    internalError.status(), request);
+        }
         List<Map<String, String>> errors = new ArrayList<>();
         for (ParameterValidationResult result : ex.getParameterValidationResults()) {
             if (result instanceof ParameterErrors parameterErrors) {
@@ -175,8 +185,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     private static ResponseEntity<ProblemDetail> problem(ErrorCode errorCode, String detail) {
+        return ResponseEntity.status(errorCode.status()).body(problemBody(errorCode, detail));
+    }
+
+    private static ProblemDetail problemBody(ErrorCode errorCode, String detail) {
         ProblemDetail body = ProblemDetail.forStatusAndDetail(errorCode.status(), detail);
         body.setProperty(CODE, errorCode.code());
-        return ResponseEntity.status(errorCode.status()).body(body);
+        return body;
     }
 }

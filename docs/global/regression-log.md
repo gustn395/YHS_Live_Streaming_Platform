@@ -13,10 +13,11 @@
 | 2026-11-26 | `.\gradlew.bat :modules:global:test :app:test --rerun-tasks --continue` (S5 검증) | 성공(exit 0), 38건 통과 | 비밀 값 패턴 grep 0건 |
 | 2026-11-26 | 같은 명령, 리뷰(S6) 지적 확인용 테스트 4건 추가 후 (수정 전) | global 23건 중 2 실패(의도) | `@RequestParam` 제약 → `COMMON_BAD_REQUEST`(errors 없음), `ConstraintViolationException` → 500. `text/html` Accept 테스트 2건은 수정 없이 통과(지적 기각) |
 | 2026-11-26 | `.\gradlew.bat :modules:global:test :app:test --continue` (수정 후) | 성공(exit 0), 42건 통과(global 23, app 19) | |
-| 2026-11-26 | `.\gradlew.bat :modules:global:test --tests ...GlobalExceptionHandlerTest` (반환값·객체 검증 위반 테스트 추가, 수정 전) | 14건 중 2 실패(의도) | 반환값 위반·객체 검증 위반이 500이 아니라 400 |
+| 2026-11-26 | `.\gradlew.bat :modules:global:test --tests com.yhs.livestreaming.global.error.GlobalExceptionHandlerTest` (반환값·객체 검증 위반 테스트 추가, 수정 전) | 14건 중 2 실패(의도) | 반환값 위반·객체 검증 위반이 500이 아니라 400 |
 | 2026-11-26 | `.\gradlew.bat :modules:global:test :app:test --continue` (수정 후) | 성공(exit 0), 44건 통과(global 25, app 19) | |
 | 2026-11-26 | `.\gradlew.bat :modules:global:test :app:test --rerun-tasks --continue` (⑤ 전 최종 검증) | 성공(exit 0), 44건 통과 | 비밀 값 패턴 grep 0건. 보안 리뷰(S10) 취약점 0건 |
-
 | 2026-11-26 | `.\gradlew.bat :app:build` (Commit 직전 App build) | 성공(exit 0) | `:app:test` UP-TO-DATE(직전 `--rerun-tasks` 실행 결과 재사용, app 19건 통과), `bootWar`·`war` 새로 생성. WAR 2개 모두 `WEB-INF/lib`에 global 포함 모듈 jar 8개 |
+| 2026-11-26 | `.\gradlew.bat :modules:global:test --tests com.yhs.livestreaming.global.error.GlobalExceptionHandlerTest` (CodeRabbit 지적 확인용 테스트 추가, 수정 전) | 15건 중 1 실패(의도) | 컨트롤러 반환값 `@NotBlank` 위반이 500이 아니라 400 → 지적 재현 |
+| 2026-11-26 | `.\gradlew.bat :modules:global:test :app:test --continue` (수정 후) | 성공(exit 0), 45건 통과(global 26, app 19) | |
 
 - 미실행: 로컬 전체 `./gradlew clean build`(빌드 정책상 실행하지 않음, CI가 실행), 실행 가능한 WAR 기동·외부 Tomcat 배포 확인.

@@ -23,11 +23,11 @@
 - 산출물: `:app:build`가 만든 WAR 2개(실행 가능, plain)의 `WEB-INF/lib`에 `yhs-live-streaming-global-0.0.1-SNAPSHOT.jar`가 들어간다(2026-11-26 확인).
 - 빌드: [modules/global/build.gradle.kts](../../backend/modules/global/build.gradle.kts) — `yhs.domain-module-conventions`, `api`로 `spring-boot-starter-webmvc`·`-security`·`-validation`, `implementation`으로 springdoc 3.1.1. `app`이 `implementation(project(":modules:global"))`로 조립한다.
 - 빌드 검사: `yhs.java-conventions`가 실행·테스트 클래스패스의 Boot·Framework 모듈 버전이 하나인지 검사한다(G-D012, GL-T011). 의존성 해석 시점(`afterResolve`)에 실패하므로 IDE의 Gradle 동기화도 같은 메시지로 실패한다.
-- 검증 오류: `@Valid @RequestBody`(MethodArgumentNotValid), `@RequestParam`·`@PathVariable` 제약(HandlerMethodValidation), `@Validated` 빈의 메서드 인자 위반(ConstraintViolation, 경로에 PARAMETER 노드)을 400 `COMMON_INVALID_INPUT` + `errors[]`로 응답한다. 반환값 위반·객체(엔티티 저장 직전 등) 검증 위반은 서버 쪽 문제라 500 `COMMON_INTERNAL_ERROR`다. 객체 수준(클래스 제약) 오류는 아직 `errors[]`에 넣지 않는다(클래스 제약을 쓰는 코드가 없음).
+- 검증 오류: `@Valid @RequestBody`(MethodArgumentNotValid), `@RequestParam`·`@PathVariable` 제약(HandlerMethodValidation), `@Validated` 빈의 메서드 인자 위반(ConstraintViolation, 경로에 PARAMETER 노드)을 400 `COMMON_INVALID_INPUT` + `errors[]`로 응답한다. 반환값 위반(컨트롤러 반환값의 `HandlerMethodValidationException.isForReturnValue()`, `@Validated` 빈의 반환값)·객체(엔티티 저장 직전 등) 검증 위반은 서버 쪽 문제라 500 `COMMON_INTERNAL_ERROR`다. 객체 수준(클래스 제약) 오류는 아직 `errors[]`에 넣지 않는다(클래스 제약을 쓰는 코드가 없음).
 - 설정: `app/src/main/resources/application.yml` — `springdoc.api-docs.enabled`·`swagger-ui.enabled` = `${SPRINGDOC_ENABLED:false}`, `spring.autoconfigure.exclude`로 Boot 기본 계정(`UserDetailsServiceAutoConfiguration`) 제외(G-D013).
 - 코드: 1장 표의 클래스가 모두 있다. JWT 필터·`LoginSessionVerifier` 구현은 없다.
 - 오류 코드: `COMMON_INVALID_INPUT`(400 검증), `COMMON_INTERNAL_ERROR`(500), `AUTH_UNAUTHENTICATED`(401), `AUTH_ACCESS_DENIED`(403), `AUTH_SESSION_STORE_UNAVAILABLE`(503). 프레임워크가 만든 오류는 `COMMON_<HTTP 상태 이름>`(예: `COMMON_NOT_FOUND`, `COMMON_BAD_REQUEST`).
-- 테스트: global 단위 테스트 4클래스 25건(외부 인프라 없음), app 통합 테스트 4클래스 19건(Docker 없음). 통합 테스트 전용 엔드포인트는 스캔 범위 밖 패키지 `testsupport`에 있다.
+- 테스트: global 단위 테스트 4클래스 26건(외부 인프라 없음), app 통합 테스트 4클래스 19건(Docker 없음). 통합 테스트 전용 엔드포인트는 스캔 범위 밖 패키지 `testsupport`에 있다.
 
 ## 3. 공개 API
 
