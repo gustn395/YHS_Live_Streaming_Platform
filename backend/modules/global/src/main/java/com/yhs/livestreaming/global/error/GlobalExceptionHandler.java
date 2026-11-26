@@ -22,6 +22,7 @@ import org.springframework.security.authentication.AuthenticationTrustResolverIm
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -49,6 +50,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ProblemDetail> handleBusiness(BusinessException ex) {
+        if (ex instanceof TooManyRequestsException tooMany) {
+            return ResponseEntity.status(ex.errorCode().status())
+                    .header(HttpHeaders.RETRY_AFTER, Long.toString(tooMany.retryAfterSeconds()))
+                    .body(problemBody(ex.errorCode(), ex.getMessage()));
+        }
         return problem(ex.errorCode(), ex.getMessage());
     }
 
@@ -59,6 +65,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ProblemDetail> handleAccessDenied(AccessDeniedException ex) {
+        // CSRF 토큰 누락·불일치는 인증 여부와 관계없이 403 AUTH_CSRF_INVALID다(G-D014). FE는 토큰을 다시 받아 재시도한다.
+        if (ex instanceof CsrfException) {
+            return problem(CommonErrorCode.CSRF_INVALID, "요청을 확인할 수 없습니다. 페이지를 새로 고친 뒤 다시 시도해 주세요.");
+        }
         // 인증되지 않은 사용자의 접근 거부는 403이 아니라 401이다(ExceptionTranslationFilter와 같은 판단).
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || trustResolver.isAnonymous(authentication)) {

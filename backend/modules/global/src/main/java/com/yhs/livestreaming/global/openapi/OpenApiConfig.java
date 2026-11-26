@@ -1,6 +1,8 @@
 package com.yhs.livestreaming.global.openapi;
 
+import com.yhs.livestreaming.global.auth.AuthCookieNames;
 import com.yhs.livestreaming.global.security.PublicEndpoint;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import com.yhs.livestreaming.global.security.PublicEndpointContributor;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -26,12 +28,24 @@ public class OpenApiConfig {
 
     /** 공통 오류 응답 스키마 이름. 각 API는 401·403·409 등 오류 응답에서 이 스키마를 참조한다. */
     public static final String PROBLEM_DETAIL_SCHEMA = "ProblemDetail";
+    /** 보호 API의 인증 스킴 이름: Access Token 쿠키(MB-D013). */
+    public static final String ACCESS_TOKEN_COOKIE_SCHEME = "accessTokenCookie";
+    /** 상태 변경 요청의 CSRF 헤더 스킴 이름(G-D014). */
+    public static final String CSRF_HEADER_SCHEME = "csrfHeader";
 
     @Bean
     OpenAPI yhsOpenApi() {
         return new OpenAPI()
                 .info(new Info().title("YHS Live Streaming API").version("v1"))
-                .components(new Components());
+                .components(new Components()
+                        .addSecuritySchemes(ACCESS_TOKEN_COOKIE_SCHEME, new SecurityScheme()
+                                .type(SecurityScheme.Type.APIKEY).in(SecurityScheme.In.COOKIE)
+                                .name(AuthCookieNames.ACCESS_TOKEN)
+                                .description("Access Token(JWT, 15분). OTP 확인 성공 때 HttpOnly 쿠키로 발급된다"))
+                        .addSecuritySchemes(CSRF_HEADER_SCHEME, new SecurityScheme()
+                                .type(SecurityScheme.Type.APIKEY).in(SecurityScheme.In.HEADER)
+                                .name("X-XSRF-TOKEN")
+                                .description("XSRF-TOKEN 쿠키 값(GET /api/v1/auth/csrf로 발급). 상태를 바꾸는 모든 요청에 필요")));
     }
 
     /**

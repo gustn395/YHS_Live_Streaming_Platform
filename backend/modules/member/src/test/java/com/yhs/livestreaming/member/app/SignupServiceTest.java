@@ -75,6 +75,26 @@ class SignupServiceTest {
         final List<Member> saved = new ArrayList<>();
 
         @Override
+        public java.util.Optional<Member> findByUsername(String username) {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public java.util.Optional<Member> findById(long id) {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public int updatePasswordHash(long id, String expectedHash, String newHash, java.time.Instant now) {
+            return 0;
+        }
+
+        @Override
+        public int activatePending(long id, java.time.Instant createdAfter, java.time.Instant now) {
+            return 0;
+        }
+
+        @Override
         public boolean existsByUsername(String username) {
             return usernameExists;
         }

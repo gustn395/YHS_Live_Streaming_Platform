@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -185,6 +186,31 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void tooManyRequestsCarriesRetryAfterSeconds() throws Exception { // GL-T017
+        mockMvc.perform(get("/too-many"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+                .andExpect(header().string("Retry-After", "91"))
+                .andExpect(jsonPath("$.code").value("COMMON_TOO_MANY_REQUESTS"))
+                .andExpect(jsonPath("$.detail").value("요청이 너무 많습니다."));
+    }
+
+    @Test
+    void retryAfterIsAtLeastOneSecond() throws Exception { // GL-T017: 0초·밀리초 잔여도 1초 이상
+        mockMvc.perform(get("/too-many-short"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "1"));
+    }
+
+    @Test
+    void csrfFailureIsForbiddenWithCsrfCodeEvenForAnonymous() throws Exception { // GL-T014·GL-T017
+        mockMvc.perform(get("/csrf-missing"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("AUTH_CSRF_INVALID"));
+    }
+
+    @Test
     void unknownPathReturnsNotFoundWithCode() throws Exception {
         mockMvc.perform(get("/no-such-path"))
                 .andExpect(status().isNotFound())
@@ -229,6 +255,23 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/session-store")
         String sessionStore() {
             throw new LoginSessionStoreUnavailableException("redis-host:6379 timeout", new RuntimeException());
+        }
+
+        @GetMapping("/too-many")
+        String tooMany() {
+            throw new TooManyRequestsException(CommonErrorCode.TOO_MANY_REQUESTS, "요청이 너무 많습니다.",
+                    java.time.Duration.ofMillis(90_100));
+        }
+
+        @GetMapping("/too-many-short")
+        String tooManyShort() {
+            throw new TooManyRequestsException(CommonErrorCode.TOO_MANY_REQUESTS, "요청이 너무 많습니다.",
+                    java.time.Duration.ZERO);
+        }
+
+        @GetMapping("/csrf-missing")
+        String csrfMissing() {
+            throw new org.springframework.security.web.csrf.MissingCsrfTokenException(null);
         }
 
         @GetMapping("/unauthenticated")
