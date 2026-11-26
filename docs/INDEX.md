@@ -16,6 +16,7 @@
 
 | 모듈 | 접두어 | 문서 | 모듈 규칙 |
 | --- | --- | --- | --- |
+| global (공통 기반) | GL | [global/INDEX.md](global/INDEX.md) | [AGENTS.md](../backend/modules/global/AGENTS.md) |
 | member | MB | [member/INDEX.md](member/INDEX.md) | [AGENTS.md](../backend/modules/member/AGENTS.md) |
 | broadcast | BC | [broadcast/INDEX.md](broadcast/INDEX.md) | [AGENTS.md](../backend/modules/broadcast/AGENTS.md) |
 | streaming | ST | [streaming/INDEX.md](streaming/INDEX.md) | [AGENTS.md](../backend/modules/streaming/AGENTS.md) |
@@ -66,6 +67,7 @@ MB-D001  MB-U01  MB-T001  MB-W01  G-D001  G-U01
 ```
 
 - `<P>`는 1장 표의 모듈 접두어다. 공통 접두어 `G`는 결정·미결에만 쓴다.
+- global 모듈은 테스트·작업에 `GL-T###`·`GL-W##`을 쓰고, 결정·미결은 `docs/<module>/decisions.md`가 아니라 `G-D`·`G-U`(`docs/policy.md`)에 둔다([G-D002](policy.md#3-공통-결정-이력)).
 - Step 기록 문서(`docs/testing/step*.md`, `backend/README.md` 9장)의 결정 번호(`Q1`…)는 그 문서 안에서 매긴다. 다른 문서에서는
   문서 링크와 함께 "step4 Q4"처럼 참조한다. 모듈·공통 정책 결정에는 위 접두 ID를 쓴다.
 
