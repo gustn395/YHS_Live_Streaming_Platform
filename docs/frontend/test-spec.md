@@ -29,5 +29,5 @@
 
 ## 2. 집계
 
-- 요구사항 17건(FE-T001~FE-T017) + 수동 1건(M-01). Vitest 17파일 215건(shared/api 85, features/auth 83, app 8, src/test 25, scripts 14).
+- 요구사항 17건(FE-T001~FE-T017) + 수동 1건(M-01). Vitest 17파일 218건(shared/api 85, features/auth 86, app 8, src/test 25, scripts 14).
   FE-T001은 명령 실행으로 검증한다. 실행 결과는 [regression-log.md](regression-log.md).

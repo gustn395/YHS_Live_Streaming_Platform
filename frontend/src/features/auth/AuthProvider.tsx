@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import type { ApiClient } from '../../shared/api/apiClient';
 import type { AuthAdapter } from './authAdapter';
 import { AuthContext, type AuthContextValue } from './authContext';
@@ -65,8 +65,18 @@ export function AuthProvider<P>({
     activeRef.current = null;
   }, []);
 
+  // 초기화 설정 토큰. adapter·deadlineMs·scope 중 하나라도 바뀌면 새 토큰이 되고, 커밋 시점(layout 단계)에 현재 토큰으로 기록한다.
+  // 이전 토큰으로 시작한 요청은 새 설정이 커밋된 뒤에는 — passive effect가 취소하기 전이라도 — 결과를 반영하지 않는다.
+  // layout cleanup에서 취소하지 않는다: Suspense·Activity가 화면을 숨기면 layout cleanup만 실행되어 초기화가 멈출 수 있다.
+  const initConfig = useMemo(() => ({ adapter, deadlineMs, scope }), [adapter, deadlineMs, scope]);
+  const committedConfigRef = useRef(initConfig);
+  useLayoutEffect(() => {
+    committedConfigRef.current = initConfig;
+  }, [initConfig]);
+
   const startInit = useCallback(
     (type: 'INIT_STARTED' | 'INIT_RETRY') => {
+      const { adapter, deadlineMs, scope } = initConfig;
       // 초기화가 끝난 뒤 adapter 등이 바뀌어 effect가 다시 돌아도 재초기화하지 않는다.
       // Reducer는 initializing이 아니면 결과를 버리지만 scope는 세대를 올려 둘이 어긋나기 때문이다.
       if (initDoneRef.current) return;
@@ -75,7 +85,7 @@ export function AuthProvider<P>({
       const id = seqRef.current;
       const epoch = scope.currentEpoch();
       const controller = new AbortController();
-      const isActive = () => activeRef.current?.id === id;
+      const isActive = () => activeRef.current?.id === id && committedConfigRef.current === initConfig;
       const finish = () => {
         if (!isActive()) return false;
         clearTimeout(activeRef.current?.timer);
@@ -117,7 +127,7 @@ export function AuthProvider<P>({
         },
       );
     },
-    [adapter, cancelActive, deadlineMs, scope],
+    [initConfig, cancelActive],
   );
 
   useEffect(() => {

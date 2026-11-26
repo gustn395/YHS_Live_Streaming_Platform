@@ -148,3 +148,23 @@
 | `npm test` | exit 0, 17파일 215건 통과 |
 | `npm run build` | exit 0, `check-dist: 가안 표지 없음` |
 
+### 2026-11-26 CodeRabbit 2차 리뷰 반영 — 기준 커밋 a12d2bd, 커밋 전 작업 트리
+
+| 지적 | RED(실행 결과) | GREEN |
+| --- | --- | --- |
+| 초기화 중 adapter 교체 시 새 adapter 커밋 뒤·새 effect 전에 끝난 이전 요청이 반영됨 | 이전 adapter가 then 콜백을 잡는 thenable을 돌려주고, AuthProvider 뒤 형제의 `useLayoutEffect`(커밋 중, passive effect 전)에서 완료시킴 → `expected 'authenticated' to be 'unauthenticated'`, 새 adapter 미호출 | adapter 변경 시 `useLayoutEffect` cleanup으로 커밋 시점에 진행 중 초기화를 무효화. 3회 연속 24/24 통과. 변이 확인: 이 줄을 지우면 새 테스트 실패 |
+| 자체 리뷰: 위 수정(layout cleanup 취소)은 Suspense·Activity 숨김 때 layout cleanup만 돌아 초기화가 멈출 수 있음 | Suspense로 숨겼다가 다시 보인 뒤 진행 중 초기화를 완료 → `expected 'initializing' to be 'authenticated'` | layout cleanup 취소를 없애고, adapter·deadlineMs·scope 설정 토큰을 layout effect에서 기록해 완료 시 비교 |
+| 자체 리뷰: 같은 커밋 창이 deadlineMs 변경에도 열려 있음 | deadlineMs 변경 커밋 직후 이전 요청 완료 → `expected '' to be 'deadline'`(이전 결과가 authenticated로 반영) | 설정 토큰 비교로 함께 차단 |
+
+- 최종 확인: AuthProvider 테스트 3회 연속 26/26 통과. 변이 확인: 토큰 비교를 지우면 커밋 창 테스트 2건(adapter·deadlineMs)이 실패.
+
+**CodeRabbit 2차 반영 뒤 재검증 (2026-11-26 20:59 KST, 기준 커밋 a12d2bd + 작업 트리)**
+
+| 명령 | 결과 |
+| --- | --- |
+| `npm ci` · `npm run lint` · `npm run typecheck` | exit 0 · exit 0 · exit 0 |
+| `npm test` | exit 0, 17파일 218건 통과 |
+| `npm run build` | exit 0, 경고 0, `check-dist: 가안 표지 없음` |
+
+- M-01은 XSRF 설정을 바꾸지 않아 다시 실행하지 않았다(19:27 결과 유지).
+

@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
-import { StrictMode, useEffect, type ReactNode } from 'react';
+import { StrictMode, Suspense, useEffect, useLayoutEffect, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { createApiClient, type ApiClient } from '../../shared/api/apiClient';
 import { ApiError } from '../../shared/api/apiError';
@@ -344,6 +344,115 @@ describe('재시도·재초기화', () => {
       </AuthProvider>,
     );
     await waitFor(() => expect(status()).toBe('unauthenticated'));
+  });
+
+  // 커밋 창 재현: 실제 Promise는 커밋 도중 resolve될 수 없으므로 then 콜백을 직접 잡는 thenable을 쓰고,
+  // AuthProvider 뒤의 형제 useLayoutEffect(같은 커밋, AuthProvider layout 단계 뒤·passive effect 전)에서 완료시킨다.
+  type AuthedResult = { authenticated: true; principal: unknown };
+  function controllableAdapter() {
+    const resolvers: Array<(r: AuthedResult) => void> = [];
+    const adapter: AuthAdapter<unknown> = {
+      initialize: () =>
+        ({
+          then(onFulfilled: (r: AuthedResult) => void) {
+            resolvers.push(onFulfilled);
+          },
+        }) as unknown as Promise<AuthedResult>,
+    };
+    return { adapter, resolvers };
+  }
+  function ResolveOnCommit({ armed, resolve }: { armed: boolean; resolve: () => void }) {
+    useLayoutEffect(() => {
+      if (armed) resolve();
+    }, [armed, resolve]);
+    return null;
+  }
+
+  it('초기화 중 adapter가 바뀐 커밋 직후(새 effect 전)에 이전 요청이 끝나도 반영하지 않는다', async () => {
+    const old = controllableAdapter();
+    const next: AuthAdapter<unknown> = { initialize: vi.fn(() => Promise.resolve({ authenticated: false as const })) };
+    const resolveOld = () => old.resolvers[0]?.({ authenticated: true, principal: { id: 'stale' } });
+    const client = createApiClient();
+    const log: AuthState<unknown>[] = [];
+    const { rerender } = render(
+      <>
+        <AuthProvider adapter={old.adapter} client={client}>
+          <Probe log={log} />
+        </AuthProvider>
+        <ResolveOnCommit armed={false} resolve={resolveOld} />
+      </>,
+    );
+    expect(old.resolvers).toHaveLength(1);
+    rerender(
+      <>
+        <AuthProvider adapter={next} client={client}>
+          <Probe log={log} />
+        </AuthProvider>
+        <ResolveOnCommit armed resolve={resolveOld} />
+      </>,
+    );
+    await waitFor(() => expect(status()).toBe('unauthenticated'));
+    expect(next.initialize).toHaveBeenCalledTimes(1);
+    expect(log.some((s) => s.status === 'authenticated')).toBe(false);
+  });
+
+  it('초기화 중 deadlineMs가 바뀐 커밋 직후에 이전 요청이 끝나도 반영하지 않는다', async () => {
+    const ctl = controllableAdapter();
+    const resolveFirst = () => ctl.resolvers[0]?.({ authenticated: true, principal: { id: 'stale' } });
+    const client = createApiClient();
+    const log: AuthState<unknown>[] = [];
+    const { rerender } = render(
+      <>
+        <AuthProvider adapter={ctl.adapter} client={client} deadlineMs={1_000}>
+          <Probe log={log} />
+        </AuthProvider>
+        <ResolveOnCommit armed={false} resolve={resolveFirst} />
+      </>,
+    );
+    rerender(
+      <>
+        <AuthProvider adapter={ctl.adapter} client={client} deadlineMs={40}>
+          <Probe log={log} />
+        </AuthProvider>
+        <ResolveOnCommit armed resolve={resolveFirst} />
+      </>,
+    );
+    await waitFor(() => expect(errorKind()).toBe('deadline'));
+    expect(ctl.resolvers).toHaveLength(2);
+    expect(log.some((s) => s.status === 'authenticated')).toBe(false);
+  });
+
+  it('Suspense가 화면을 잠시 숨겼다가 다시 보여도 진행 중인 초기화가 끝나 결과를 반영한다', async () => {
+    const ctl = controllableAdapter();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    function MaybeSuspend({ suspend }: { suspend: boolean }) {
+      if (suspend) throw gate;
+      return null;
+    }
+    const client = createApiClient();
+    function App({ suspend }: { suspend: boolean }) {
+      return (
+        <Suspense fallback={<p>숨김</p>}>
+          <AuthProvider adapter={ctl.adapter} client={client} deadlineMs={2_000}>
+            <Probe log={[]} />
+          </AuthProvider>
+          <MaybeSuspend suspend={suspend} />
+        </Suspense>
+      );
+    }
+    const { rerender } = render(<App suspend={false} />);
+    expect(ctl.resolvers).toHaveLength(1);
+    rerender(<App suspend />);
+    expect(await screen.findByText('숨김')).toBeInTheDocument();
+    rerender(<App suspend={false} />);
+    await act(async () => {
+      release();
+      await gate;
+    });
+    await waitFor(() => expect(screen.queryByText('숨김')).not.toBeInTheDocument());
+    act(() => ctl.resolvers[0]?.({ authenticated: true, principal: { id: 'm' } }));
+    await waitFor(() => expect(status()).toBe('authenticated'));
   });
 });
 

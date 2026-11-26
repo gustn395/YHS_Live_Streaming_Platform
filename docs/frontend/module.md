@@ -50,7 +50,8 @@ frontend/
 - 오류 표시 분류(`errorPresentation.ts`): forbidden(403)·retry-later(503 `AUTH_SESSION_STORE_UNAVAILABLE`)·common·caller·silent.
 - 인증(`src/features/auth/`): 순수 Reducer `authReducer`, `AuthProvider`(Context + useReducer, 초기화 Deadline 15000ms, 요청 ID별
   AbortController, StrictMode에서 이전 초기화 취소, 진행 중인 재시도가 있으면 `retry`를 동기적으로 무시, 초기화가 결과로 끝난 뒤에는
-  adapter가 바뀌어도 재초기화하지 않음 — 초기화 중 교체는 새 adapter로 다시 시작, [FE-D016](decisions.md#1-확정-결정)), `createSessionScope`(세대·세대별 AbortController·세션 상실 중복 방지, 리스너 1개),
+  adapter가 바뀌어도 재초기화하지 않음 — 초기화 중 adapter·deadlineMs가 바뀌면 커밋 시점(layout effect)에 기록한 설정 토큰과 다른 이전 요청의 결과를 버리고
+  새 설정으로 다시 시작, Suspense 숨김에도 진행 중 초기화를 유지, [FE-D016](decisions.md#1-확정-결정)), `createSessionScope`(세대·세대별 AbortController·세션 상실 중복 방지, 리스너 1개),
   `classifyInitFailure`, `unavailableAuthAdapter`(네트워크 없음, 항상 미인증), `RequireAuth`, `safeRedirect`.
   로그아웃·새 로그인(인증 주체 변경) 이벤트는 BE-03 계약 전이라 만들지 않았다.
 - 라우팅(`src/app/router.tsx`): `/`(공개), `/login`(준비 중, 세션 만료 안내), `/forbidden`, `RequireAuth` 아래 `/app`, `*`(404),
