@@ -113,3 +113,38 @@
 - 한계: Network 탭 기록은 도구의 추적이 요청 뒤에 시작돼 남지 않았다. 헤더는 XHR `setRequestHeader` 호출 기록으로 확인했다(브라우저가 추가하는
   헤더는 대상이 아니다). 운영 빌드(`vite preview`)는 `/src`를 불러올 수 없어 개발 서버로만 확인했다. 확인 뒤 쿠키를 지우고 탭·개발 서버를 종료했다.
 
+### 2026-11-26 CodeRabbit 리뷰 반영 — 기준 커밋 ecb851f, 커밋 전 작업 트리
+
+| 지적 | RED(실행 결과) | GREEN |
+| --- | --- | --- |
+| `forbidTestModules`에 `enforce: 'pre'` 없음 | `?raw`·`?url`로 `src/test` 모듈을 들여오면 빌드 성공(2건 실패: "promise resolved … instead of rejecting") | `enforce: 'pre'` 추가 뒤 빌드 실패로 차단 |
+| ProblemDetail `includes` 판별 | `application/json; profile="application/problem+json"` 등 3건을 ProblemDetail로 처리 | 미디어 타입 정확 비교, `; charset=utf-8`·대소문자는 허용 |
+| 비동기 `parse` 미대기 | reject가 `Error: 형식 오류`로 그대로 전파, 파싱 중 세대 전환에도 결과 반환("요청이 성공했다") | `await parse` + `invalid-response` 변환 + 파싱 뒤 세대 재확인(`canceled`) |
+| `retry` 중복 호출 | 같은 렌더의 `retry`를 두 번 부르면 요청 ID 불일치로 `initializing`에 머묾(무한 로딩 재현) | 진행 중 재시도 동기 차단. 변이 확인: 차단 줄을 지우면 이 테스트가 실패 |
+| 초기화 뒤 adapter 교체 시 재초기화(minor) | 새 adapter가 다시 호출되고 scope 세대만 올라 세션 상실 401 뒤에도 인증 상태가 남음 | 초기화가 결과로 끝나면 재초기화하지 않음. 초기화 중 교체는 새 adapter로 시작(테스트 추가) |
+
+| 자체 리뷰(Bot 반영분): 세대가 바뀐 뒤 parse가 reject하면 `invalid-response` | 1건 실패(`expected { kind: 'invalid-response' } … { kind: 'canceled' }`) | catch에서도 세대를 먼저 확인해 `canceled`(FE-D011) |
+| 자체 리뷰(Bot 반영분): Deadline 뒤 재시도 테스트 없음 | RED 없음 — 기존 코드가 이미 허용(`finish()`가 진행 중 표시를 비움)을 확인하는 테스트로 처음부터 통과 | 테스트 추가 |
+
+- 재검증 결과는 아래 "Bot 리뷰 반영 뒤 재검증" 절.
+
+**Bot 리뷰 반영 뒤 재검증 (2026-11-26 19:51 KST, 기준 커밋 ecb851f + 작업 트리)**
+
+| 명령 | 결과 |
+| --- | --- |
+| `npm ci` | exit 0 (audit moderate 9 그대로, FE-D015) |
+| `npm run lint` | exit 0 |
+| `npm run typecheck` | exit 0 |
+| `npm test` | exit 0, 17파일 213건 통과 |
+| `npm run build` | exit 0, 경고 0, `check-dist: 가안 표지 없음` |
+
+- M-01은 XSRF 설정(`AXIOS_SECURITY_DEFAULTS`)을 바꾸지 않아 다시 실행하지 않았다(19:27 결과 유지).
+
+**자체 리뷰 반영 뒤 재검증 (2026-11-26 19:55 KST, 기준 커밋 ecb851f + 작업 트리)**
+
+| 명령 | 결과 |
+| --- | --- |
+| `npm ci` · `npm run lint` · `npm run typecheck` | exit 0 · exit 0 · exit 0 |
+| `npm test` | exit 0, 17파일 215건 통과 |
+| `npm run build` | exit 0, `check-dist: 가안 표지 없음` |
+

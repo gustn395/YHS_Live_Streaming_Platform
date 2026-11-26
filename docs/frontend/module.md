@@ -44,16 +44,18 @@ frontend/
   (`baseURL: '/api'`, `allowAbsoluteUrls: false`, `withXSRFToken: false`, XSRF 쿠키·헤더 이름 빈 값, `withCredentials: false`, XHR 어댑터),
   `clarifyTimeoutError`. 요청 옵션은 `ApiRequest`(method·path·authScope 필수, timeoutMs·signal·data·params)뿐이다. 경로 검증
   `toApiPath`, Timeout 검증 `resolveTimeoutMs`(기본 10000ms, 1~60000 정수), 오류 `ApiError.failure`(`http`·`invalid-response`·
-  `network`·`timeout`·`canceled`), 응답 형식 검증은 선택 인자 `parse`. session 요청은 시작 세대를 기억해 세대가 바뀌면 결과를
+  `network`·`timeout`·`canceled`), 응답 형식 검증은 선택 인자 `parse`(동기·비동기, 실패는 `invalid-response`이되 세대가 바뀌었으면 `canceled`, 파싱 뒤 세대를 다시 확인).
+  ProblemDetail 판별은 `Content-Type`의 미디어 타입(매개변수 앞)이 정확히 `application/problem+json`일 때만. session 요청은 시작 세대를 기억해 세대가 바뀌면 결과를
   `canceled`로 버리고, 401 `AUTH_UNAUTHENTICATED`이면 `AuthBridge.reportSessionLost(세대)`만 호출한다(이동 없음).
 - 오류 표시 분류(`errorPresentation.ts`): forbidden(403)·retry-later(503 `AUTH_SESSION_STORE_UNAVAILABLE`)·common·caller·silent.
 - 인증(`src/features/auth/`): 순수 Reducer `authReducer`, `AuthProvider`(Context + useReducer, 초기화 Deadline 15000ms, 요청 ID별
-  AbortController, StrictMode에서 이전 초기화 취소), `createSessionScope`(세대·세대별 AbortController·세션 상실 중복 방지, 리스너 1개),
+  AbortController, StrictMode에서 이전 초기화 취소, 진행 중인 재시도가 있으면 `retry`를 동기적으로 무시, 초기화가 결과로 끝난 뒤에는
+  adapter가 바뀌어도 재초기화하지 않음 — 초기화 중 교체는 새 adapter로 다시 시작, [FE-D016](decisions.md#1-확정-결정)), `createSessionScope`(세대·세대별 AbortController·세션 상실 중복 방지, 리스너 1개),
   `classifyInitFailure`, `unavailableAuthAdapter`(네트워크 없음, 항상 미인증), `RequireAuth`, `safeRedirect`.
   로그아웃·새 로그인(인증 주체 변경) 이벤트는 BE-03 계약 전이라 만들지 않았다.
 - 라우팅(`src/app/router.tsx`): `/`(공개), `/login`(준비 중, 세션 만료 안내), `/forbidden`, `RequireAuth` 아래 `/app`, `*`(404),
   루트 `errorElement`(`RouteError`, 오류 상세 미노출).
-- 빌드 검사: `scripts/forbidTestModules.ts`(Vite build 플러그인, `src/test`·`*.test.*`·`msw` 모듈 load 시 실패),
+- 빌드 검사: `scripts/forbidTestModules.ts`(Vite build 플러그인, `enforce: 'pre'`, `src/test`·`*.test.*`·`msw` 모듈 load 시 실패. `?raw`·`?url` 포함),
   `scripts/checkDist.ts`(dist에서 가안 표지·경로 검색).
 - 테스트: 수와 대응은 [test-spec.md](test-spec.md) 2장, 실행 결과는 [regression-log.md](regression-log.md).
 

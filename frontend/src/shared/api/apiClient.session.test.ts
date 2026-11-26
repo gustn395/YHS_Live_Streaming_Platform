@@ -142,6 +142,39 @@ describe('오래된 세대 응답', () => {
   });
 });
 
+// FE-T009: 비동기 parse가 끝나기 전에 세대가 바뀌면 결과를 버린다(Bot 리뷰 반영)
+describe('비동기 parse 중 세대 전환', () => {
+  it('parse 완료 시점에 세대가 바뀌었으면 canceled', async () => {
+    server.use(http.get('*/api/v1/me', () => HttpResponse.json({ id: 'old-member' })));
+    const client = createApiClient();
+    const fake = fakeBridge(1);
+    client.attachAuthBridge(fake.bridge);
+    const parse = async (data: unknown) => {
+      fake.advance(); // 파싱하는 동안 세션이 바뀐다
+      await delay(5);
+      return data;
+    };
+    expect(await failureOf(client.request({ method: 'get', path: '/v1/me', authScope: 'session' }, parse))).toEqual({
+      kind: 'canceled',
+    });
+  });
+
+  it('세대가 바뀐 뒤 parse가 reject해도 형식 오류가 아니라 canceled(FE-D011)', async () => {
+    server.use(http.get('*/api/v1/me', () => HttpResponse.json({ id: 'old-member' })));
+    const client = createApiClient();
+    const fake = fakeBridge(1);
+    client.attachAuthBridge(fake.bridge);
+    const parse = async () => {
+      fake.advance();
+      await delay(5);
+      throw new Error('형식 오류');
+    };
+    expect(await failureOf(client.request({ method: 'get', path: '/v1/me', authScope: 'session' }, parse))).toEqual({
+      kind: 'canceled',
+    });
+  });
+});
+
 // FE-T011: 세대 전환은 이전 세대의 session 요청만 취소한다
 describe('선택적 취소', () => {
   function slowEndpoint() {

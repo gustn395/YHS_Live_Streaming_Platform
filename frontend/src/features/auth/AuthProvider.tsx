@@ -54,6 +54,8 @@ export function AuthProvider<P>({
 
   const seqRef = useRef(0);
   const activeRef = useRef<ActiveInit | null>(null);
+  // 초기화가 결과(인증·미인증)로 끝났는지. 끝난 뒤에는 다시 초기화하지 않는다(FE-D016, Reducer 세대와 scope 세대 일치 유지).
+  const initDoneRef = useRef(false);
 
   const cancelActive = useCallback(() => {
     const active = activeRef.current;
@@ -65,6 +67,9 @@ export function AuthProvider<P>({
 
   const startInit = useCallback(
     (type: 'INIT_STARTED' | 'INIT_RETRY') => {
+      // 초기화가 끝난 뒤 adapter 등이 바뀌어 effect가 다시 돌아도 재초기화하지 않는다.
+      // Reducer는 initializing이 아니면 결과를 버리지만 scope는 세대를 올려 둘이 어긋나기 때문이다.
+      if (initDoneRef.current) return;
       cancelActive();
       seqRef.current += 1;
       const id = seqRef.current;
@@ -94,6 +99,7 @@ export function AuthProvider<P>({
             dispatch({ type: 'INIT_FAILED', requestId: id, epoch, error: { kind: 'unexpected' } });
             return;
           }
+          initDoneRef.current = true;
           dispatch({ type: 'INIT_SUCCEEDED', requestId: id, epoch, result });
         },
         (error: unknown) => {
@@ -102,6 +108,7 @@ export function AuthProvider<P>({
           // 우리가 취소하지 않았는데 취소로 끝난 경우: 타이머를 남겨 Deadline이 initError로 바꾼다.
           if (outcome.type === 'ignore') return;
           finish();
+          if (outcome.type === 'unauthenticated') initDoneRef.current = true;
           dispatch(
             outcome.type === 'unauthenticated'
               ? { type: 'INIT_SUCCEEDED', requestId: id, epoch, result: { authenticated: false } }
@@ -119,6 +126,8 @@ export function AuthProvider<P>({
   }, [startInit, cancelActive]);
 
   const retry = useCallback(() => {
+    // 진행 중인 재시도가 있으면 동기적으로 막는다. 렌더 전 같은 retry가 두 번 불려도 요청 ID가 Reducer와 어긋나지 않는다.
+    if (activeRef.current !== null) return;
     if (state.status === 'initializing' && state.initError !== null) startInit('INIT_RETRY');
   }, [state, startInit]);
 

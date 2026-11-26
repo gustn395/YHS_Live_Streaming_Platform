@@ -39,6 +39,34 @@ describe('성공 응답', () => {
   });
 });
 
+// FE-T002: 비동기 parse도 기다린 뒤 형식 오류를 invalid-response로 바꾼다(Bot 리뷰 반영)
+describe('비동기 parse', () => {
+  it('비동기 parse 결과를 기다려 돌려준다', async () => {
+    server.use(http.get('*/api/v1/ping', () => HttpResponse.json({ pong: true })));
+    const client = createApiClient();
+    const parse = async (data: unknown) => {
+      await delay(5);
+      return { parsed: data };
+    };
+    await expect(client.request({ method: 'get', path: '/v1/ping', authScope: 'none' }, parse)).resolves.toEqual({
+      parsed: { pong: true },
+    });
+  });
+
+  it('비동기 parse가 reject하면 invalid-response(status 보존)다', async () => {
+    server.use(http.get('*/api/v1/ping', () => HttpResponse.json({ unexpected: 1 })));
+    const client = createApiClient();
+    const parse = async () => {
+      await delay(5);
+      throw new Error('형식 오류');
+    };
+    expect(await failureOf(client.request({ method: 'get', path: '/v1/ping', authScope: 'none' }, parse))).toEqual({
+      kind: 'invalid-response',
+      status: 200,
+    });
+  });
+});
+
 // FE-T002: 오류 응답 정규화(G-D003, FE-D007)
 describe('HTTP 오류 정규화', () => {
   it('ProblemDetail의 code·title·detail·errors[]를 꺼낸다', async () => {

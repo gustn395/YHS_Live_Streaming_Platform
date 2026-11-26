@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
-import { StrictMode, type ReactNode } from 'react';
+import { StrictMode, useEffect, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { createApiClient, type ApiClient } from '../../shared/api/apiClient';
 import { ApiError } from '../../shared/api/apiError';
@@ -248,6 +248,102 @@ describe('세션 상실', () => {
     await expect(client.request({ method: 'get', path: '/v1/private', authScope: 'session' })).rejects.toThrow(
       'AuthBridge 연결이 필요',
     );
+  });
+});
+
+// FE-T010·FE-T009: 재시도 중복·초기화 뒤 재초기화로 요청 ID·세대가 어긋나지 않는다(Bot 리뷰 반영)
+describe('재시도·재초기화', () => {
+  it('Deadline으로 끝난 뒤에도 재시도 한 번이 허용되고 결과를 반영한다', async () => {
+    let calls = 0;
+    const adapter: AuthAdapter<unknown> = {
+      initialize: () => {
+        calls += 1;
+        return calls === 1 ? new Promise(() => {}) : Promise.resolve({ authenticated: false });
+      },
+    };
+    renderAuth({ adapter, deadlineMs: 30 });
+    await waitFor(() => expect(errorKind()).toBe('deadline'));
+    act(() => screen.getByRole('button', { name: 'retry' }).click());
+    await waitFor(() => expect(status()).toBe('unauthenticated'));
+    expect(calls).toBe(2);
+  });
+
+  it('오류 상태에서 retry를 연달아 두 번 불러도 한 번만 재시도하고 결과를 반영한다(무한 로딩 없음)', async () => {
+    let calls = 0;
+    const adapter: AuthAdapter<unknown> = {
+      initialize: async () => {
+        calls += 1;
+        if (calls === 1) throw new ApiError({ kind: 'http', status: 503, problem: { code: 'AUTH_SESSION_STORE_UNAVAILABLE', fieldErrors: [] } });
+        await delay(10);
+        return { authenticated: true, principal: { id: 'm' } };
+      },
+    };
+    const holder: { retry?: () => void } = {};
+    function Capture() {
+      const { retry } = useAuth();
+      useEffect(() => {
+        holder.retry = retry;
+      });
+      return null;
+    }
+    render(
+      <AuthProvider adapter={adapter} client={createApiClient()} deadlineMs={1_000}>
+        <Probe log={[]} />
+        <Capture />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(errorKind()).toBe('unavailable'));
+    const retryFromSameRender = holder.retry;
+    act(() => {
+      retryFromSameRender?.();
+      retryFromSameRender?.();
+    });
+    await waitFor(() => expect(status()).toBe('authenticated'));
+    expect(calls).toBe(2);
+  });
+
+  it('초기화가 끝난 뒤 adapter가 바뀌어도 다시 초기화하지 않고, 세대가 맞아 세션 상실이 반영된다', async () => {
+    server.use(http.get(ME, () => HttpResponse.json({ memberId: 'm-1' })));
+    const client = createApiClient();
+    const first = createProvisionalAuthAdapter(client);
+    const second: AuthAdapter<unknown> = { initialize: vi.fn(() => Promise.resolve({ authenticated: true, principal: { id: 'other' } })) };
+    const { rerender } = render(
+      <AuthProvider adapter={first} client={client}>
+        <Probe log={[]} />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(status()).toBe('authenticated'));
+    rerender(
+      <AuthProvider adapter={second} client={client}>
+        <Probe log={[]} />
+      </AuthProvider>,
+    );
+    await act(() => delay(10));
+    expect(second.initialize).not.toHaveBeenCalled();
+
+    server.use(http.get('*/api/v1/private', () => HttpResponse.json({ code: 'AUTH_UNAUTHENTICATED' }, { status: 401, headers: PROBLEM })));
+    await act(async () => {
+      await client.request({ method: 'get', path: '/v1/private', authScope: 'session' }).catch(() => {});
+    });
+    await waitFor(() => expect(status()).toBe('unauthenticated'));
+  });
+
+  it('초기화 중에 adapter가 바뀌면 새 adapter로 초기화한다', async () => {
+    const pending: AuthAdapter<unknown> = { initialize: () => new Promise(() => {}) };
+    const next: AuthAdapter<unknown> = { initialize: () => Promise.resolve({ authenticated: false }) };
+    const client = createApiClient();
+    const { rerender } = render(
+      <AuthProvider adapter={pending} client={client}>
+        <Probe log={[]} />
+      </AuthProvider>,
+    );
+    expect(status()).toBe('initializing');
+    rerender(
+      <AuthProvider adapter={next} client={client}>
+        <Probe log={[]} />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(status()).toBe('unauthenticated'));
   });
 });
 

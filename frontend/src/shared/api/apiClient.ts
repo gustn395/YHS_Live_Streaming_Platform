@@ -21,7 +21,7 @@ export const AXIOS_SECURITY_DEFAULTS = {
   adapter: 'xhr',
 } as const;
 
-export type ResponseParser<T> = (data: unknown) => T;
+export type ResponseParser<T> = (data: unknown) => T | Promise<T>;
 
 /**
  * shared/api가 인증 상태에 대해 아는 전부다. 구현은 features/auth가 붙인다(순환 의존 방지).
@@ -114,11 +114,18 @@ export function createApiClient(): ApiClient {
       }
       if (isStale()) throw new ApiError({ kind: 'canceled' });
       if (!parse) return data as T;
+      let parsed: T;
       try {
-        return parse(data);
+        // 비동기 parse도 기다려 형식 오류를 invalid-response로 바꾼다.
+        parsed = await parse(data);
       } catch (error) {
+        // 이미 버릴 오래된 세대의 응답이면 형식 오류가 아니라 취소다(FE-D011).
+        if (isStale()) throw new ApiError({ kind: 'canceled' }, { cause: error });
         throw new ApiError({ kind: 'invalid-response', status }, { cause: error });
       }
+      // 파싱하는 동안 세대가 바뀌었으면 결과를 버린다.
+      if (isStale()) throw new ApiError({ kind: 'canceled' });
+      return parsed;
     },
   };
 }

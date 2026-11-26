@@ -15,7 +15,9 @@ function isFieldError(value: unknown): value is FieldError {
  * 형식이 맞지 않으면 null. 없는 필드는 채우지 않는다.
  */
 export function parseProblemDetail(contentType: string | undefined, body: unknown): ProblemInfo | null {
-  if (!contentType?.toLowerCase().includes(PROBLEM_JSON) || !isRecord(body)) return null;
+  // 매개변수(; charset=… 등) 앞의 미디어 타입만 정확히 비교한다. profile 매개변수 안의 문자열에 속지 않는다.
+  const mediaType = contentType?.split(';', 1)[0]?.trim().toLowerCase();
+  if (mediaType !== PROBLEM_JSON || !isRecord(body)) return null;
   const info: ProblemInfo = {
     fieldErrors: Array.isArray(body.errors) ? body.errors.filter(isFieldError) : [],
   };

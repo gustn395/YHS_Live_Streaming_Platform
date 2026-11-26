@@ -56,6 +56,15 @@ describe('빌드 모듈 그래프 검사', () => {
     await expect(buildEntry(entryImporting('src/test/provisionalAuthAdapter.ts', true))).rejects.toThrow(/테스트 전용 모듈/);
   }, 60_000);
 
+  it.each(['?raw', '?url'])('%s 쿼리로 들여와도 실패한다(enforce: pre)', async (query) => {
+    const dir = mkdtempSync(join(tmpdir(), 'fe01-graph-'));
+    tempDirs.push(dir);
+    const target = join(root, 'src/test/provisionalAuthAdapter.ts').replaceAll('\\', '/');
+    const entry = join(dir, 'entry.ts');
+    writeFileSync(entry, `export { default } from '${target}${query}';\n`);
+    await expect(buildEntry(entry)).rejects.toThrow(/테스트 전용 모듈/);
+  }, 60_000);
+
   it('운영 어댑터만 쓰면 빌드된다', async () => {
     await expect(buildEntry(entryImporting('src/features/auth/unavailableAuthAdapter.ts'))).resolves.toBeDefined();
   }, 60_000);

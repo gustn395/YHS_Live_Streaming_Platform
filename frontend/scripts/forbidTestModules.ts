@@ -13,6 +13,8 @@ export function forbidTestModules(): Plugin {
   return {
     name: 'yhs:forbid-test-modules',
     apply: 'build',
+    // vite:asset 등 core 플러그인이 ?raw·?url 모듈을 먼저 load하면 검사가 건너뛰어지므로 가장 먼저 실행한다.
+    enforce: 'pre',
     load(id) {
       if (isTestModule(id)) this.error(`테스트 전용 모듈이 운영 빌드에 포함됐다: ${id}`);
       return null;
