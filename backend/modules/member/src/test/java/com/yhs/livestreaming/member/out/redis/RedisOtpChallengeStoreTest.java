@@ -381,6 +381,22 @@ class RedisOtpChallengeStoreTest extends RedisTestSupport {
         }
     }
 
+    @Test
+    void issueStoresTheDeliveryEmailAndFindReturnsIt() { // MB-T053
+        issueConfirmed("ch-mail", "h1");
+
+        assertThat(store.find("ch-mail")).hasValueSatisfying(
+                snapshot -> assertThat(snapshot.deliveryEmail()).isEqualTo("deliver@example.com"));
+    }
+
+    @Test
+    void legacyChallengeWithoutDeliveryEmailIsNotFound() { // MB-T053: 필드 없는 이전 Challenge는 무효
+        issueConfirmed("ch-old", "h1");
+        template.opsForHash().delete("auth:otp:challenge:ch-old", "deliveryEmail");
+
+        assertThat(store.find("ch-old")).isEmpty();
+    }
+
     /** 발급 + 메일 발송 성공 확인까지 끝낸 상태(검증 가능). */
     private void issueConfirmed(String id, String hmac) {
         assertThat(store.issueForLogin(challenge(id, hmac), now).status()).isEqualTo(Status.OK);
@@ -388,11 +404,13 @@ class RedisOtpChallengeStoreTest extends RedisTestSupport {
     }
 
     private NewOtpChallenge challenge(String id, String hmac) {
-        return new NewOtpChallenge(id, MEMBER, hmac, "digest-" + hmac, KEY_ID, now.plusSeconds(300), now.plusSeconds(600));
+        return new NewOtpChallenge(id, MEMBER, hmac, "digest-" + hmac, KEY_ID, now.plusSeconds(300), now.plusSeconds(600),
+                "deliver@example.com");
     }
 
     private OtpChallengeSnapshot snapshot(String id, int version) {
-        return new OtpChallengeSnapshot(id, MEMBER, version, KEY_ID, now.plusSeconds(300), now.plusSeconds(600));
+        return new OtpChallengeSnapshot(id, MEMBER, version, KEY_ID, now.plusSeconds(300), now.plusSeconds(600), List.of(),
+                "deliver@example.com");
     }
 
     private void passInterval() {

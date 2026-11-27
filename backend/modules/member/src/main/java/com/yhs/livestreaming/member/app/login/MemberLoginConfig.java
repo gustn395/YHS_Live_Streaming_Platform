@@ -2,6 +2,8 @@ package com.yhs.livestreaming.member.app.login;
 
 import com.yhs.livestreaming.global.security.jwt.AccessTokenIssuer;
 import com.yhs.livestreaming.member.app.MemberRepository;
+import com.yhs.livestreaming.member.app.oauth.GoogleAccountRepository;
+import com.yhs.livestreaming.member.app.oauth.GoogleLoginService;
 import com.yhs.livestreaming.member.app.limit.LoginAttemptLimiter;
 import com.yhs.livestreaming.member.app.limit.MemberLimitProperties;
 import com.yhs.livestreaming.member.app.otp.MemberOtpProperties;
@@ -51,8 +53,16 @@ public class MemberLoginConfig {
 
     @Bean
     LoginCompletionService loginCompletionService(MemberRepository members, LoginSessionStore sessions,
-                                                  AccessTokenIssuer accessTokenIssuer, Clock clock) {
-        return new LoginCompletionService(members, sessions, accessTokenIssuer, clock);
+                                                  AccessTokenIssuer accessTokenIssuer, Clock clock,
+                                                  GoogleAccountRepository googleAccounts) {
+        return new LoginCompletionService(members, sessions, accessTokenIssuer, clock, googleAccounts);
+    }
+
+    @Bean
+    GoogleLoginService googleLoginService(GoogleAccountRepository googleAccounts, OtpService otpService, Clock clock) {
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        return new GoogleLoginService(googleAccounts, otpService, clock,
+                () -> String.format(java.util.Locale.ROOT, "%06d", random.nextInt(1_000_000)));
     }
 
     @Bean

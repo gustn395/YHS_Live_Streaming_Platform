@@ -13,6 +13,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     // OTP 메일 SMTP 발송(MB-D016)
     implementation("org.springframework.boot:spring-boot-starter-mail")
+    // Google OIDC 로그인(oauth2Login, Code+PKCE+OIDC, MB-D023). Boot 4 스타터 이름이며 코드는 Security 6.5 호환 API만 쓴다
+    implementation("org.springframework.boot:spring-boot-starter-security-oauth2-client")
 
     // Redis 어댑터 테스트: Testcontainers Redis(GenericContainer, G-D009). SMTP 어댑터 테스트: Testcontainers Mailpit
     testImplementation("org.springframework.boot:spring-boot-starter-data-redis-test")

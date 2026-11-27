@@ -17,6 +17,7 @@ import com.yhs.livestreaming.member.app.login.LogoutService;
 import com.yhs.livestreaming.member.app.login.RefreshService;
 import com.yhs.livestreaming.member.app.otp.OtpResent;
 import com.yhs.livestreaming.member.app.otp.OtpService;
+import com.yhs.livestreaming.member.app.otp.VerifiedOtp;
 import com.yhs.livestreaming.member.in.dto.LoginRequest;
 import com.yhs.livestreaming.member.in.dto.LoginSuccessResponse;
 import com.yhs.livestreaming.member.in.dto.OtpRequiredResponse;
@@ -107,10 +108,10 @@ public class ApiV1AuthController implements ApiV1AuthSpec {
             @Valid @RequestBody OtpVerifyRequest request,
             HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
         rateLimiter.acquire(RateLimitScope.OTP, ClientIp.of(httpRequest));
-        long memberId = otpService.verify(requireChallenge(challengeId), request.code());
+        VerifiedOtp verified = otpService.verify(requireChallenge(challengeId), request.code());
         // Challenge는 위에서 소비됐다. 쓸모없어진 쿠키를 먼저 지우고, 아래에서 실패하면 인증 쿠키 없이 다시 로그인하게 한다.
         cookies.clearChallenge(httpResponse);
-        CompletedLogin login = loginCompletionService.complete(memberId);
+        CompletedLogin login = loginCompletionService.complete(verified);
         cookies.writeAccessToken(httpResponse, login.accessToken().value(), login.accessToken().expiresAt());
         cookies.writeRefreshToken(httpResponse, login.refreshToken(), login.sessionExpiresAt());
         // 최종 인증 성공 = 인증 상태 변경: CSRF 토큰을 새로 만든다(G-D014). 1차 인증에서는 하지 않는다.

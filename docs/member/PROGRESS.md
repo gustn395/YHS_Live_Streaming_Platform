@@ -11,8 +11,8 @@
 | MB-W03 | 비밀번호 해시·정책·유출 비밀번호 검사(HIBP) | #10 | 완료(PR #12) |
 | MB-W04 | 회원가입 API | #10 | 완료(PR #12) |
 | MB-W05~W08 | JWT·쿠키·CSRF·Redis 기반, 로그인 1차 인증, OTP, 토큰 발급(BE-03). 가입 IP Rate Limit(MB-D018)·로그인 재해시 포함 | #13 | 완료(PR #15) |
-| MB-W09~W10 | Refresh Rotation, 로그아웃(BE-04). CSRF 세션 인증 전략 수정(GL-T018) 포함 | #17 | 진행 중(구현·테스트 완료, 리뷰·커밋 전) |
-| MB-W11 | Google OIDC(BE-05) | — | 대기 |
+| MB-W09~W10 | Refresh Rotation, 로그아웃(BE-04). CSRF 세션 인증 전략 수정(GL-T018) 포함 | #17 | 완료(PR #19) |
+| MB-W11 | Google OIDC(BE-05): 이메일 OTP 연계, GOOGLE 회원 자동 가입 | #21 | 진행 중(구현·테스트 완료, 리뷰·커밋 전) |
 | MB-W12 | React 인증 화면(FE 번호 체계) | — | 대기 |
 | MB-W13 | Swagger Spec 대조(각 작업과 병행) | — | 진행 중 |
 
@@ -26,3 +26,5 @@
 - 외부 공개 전 결정: [MB-U06](decisions.md#2-미결) 신뢰 프록시·클라이언트 IP, [MB-U04](decisions.md#2-미결) 키 교체·복구.
 - 범위 밖 미결(BE-04 구현을 막지 않음): [MB-U07](decisions.md#2-미결) 모든 기기 로그아웃·회원별 세션 색인·정지 시 즉시 폐기. 회원 정지 기능 구현 때 결정.
 - Frontend 협의 안건: FE-U02(Refresh 호출 시점·FE-D007과의 관계, `AUTH_REFRESH_INVALID`, MB-D020~D022). Issue #17에서 FE 문서·코드는 고치지 않는다.
+- 범위 밖 미결(BE-05 구현을 막지 않음): [MB-U08](decisions.md#2-미결) 기존 LOCAL 회원의 Google 계정 연결.
+- Frontend 협의 안건: FE-U02(Google 로그인 시작 링크, OTP 입력·실패 화면 경로와 `?error=` 코드, MB-D024). Issue #21에서 FE 문서·코드는 고치지 않는다.

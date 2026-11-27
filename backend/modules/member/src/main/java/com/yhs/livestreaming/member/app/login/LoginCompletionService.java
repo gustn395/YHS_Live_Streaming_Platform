@@ -9,8 +9,11 @@ import com.yhs.livestreaming.member.app.MemberRepository;
 import com.yhs.livestreaming.member.app.session.LoginSessionStore;
 import com.yhs.livestreaming.member.app.session.LoginSessionStore.CreateResult;
 import com.yhs.livestreaming.member.app.session.NewLoginSession;
+import com.yhs.livestreaming.member.app.otp.VerifiedOtp;
 import com.yhs.livestreaming.member.app.session.RandomTokens;
+import com.yhs.livestreaming.member.app.oauth.GoogleAccountRepository;
 import com.yhs.livestreaming.member.domain.AccountStatus;
+import com.yhs.livestreaming.member.domain.AccountType;
 import com.yhs.livestreaming.member.domain.Member;
 import java.time.Clock;
 import java.time.Duration;
@@ -37,19 +40,24 @@ public class LoginCompletionService {
     private final LoginSessionStore sessions;
     private final AccessTokenIssuer accessTokens;
     private final Clock clock;
+    private final GoogleAccountRepository googleAccounts;
 
     public LoginCompletionService(MemberRepository members, LoginSessionStore sessions,
-                                  AccessTokenIssuer accessTokens, Clock clock) {
+                                  AccessTokenIssuer accessTokens, Clock clock, GoogleAccountRepository googleAccounts) {
         this.members = members;
         this.sessions = sessions;
         this.accessTokens = accessTokens;
         this.clock = clock;
+        this.googleAccounts = googleAccounts;
     }
 
-    public CompletedLogin complete(long memberId) {
+    public CompletedLogin complete(VerifiedOtp verified) {
         Instant now = clock.instant();
+        long memberId = verified.memberId();
         Member member = loginAllowed(members.findById(memberId), now);
-        if (member.getAccountStatus() == AccountStatus.PENDING) {
+        if (member.getAccountType() == AccountType.GOOGLE) {
+            member = confirmGoogle(member, verified.deliveryEmail(), now);
+        } else if (member.getAccountStatus() == AccountStatus.PENDING) {
             int rows = members.activatePending(memberId, now.minus(Member.PENDING_TTL), now);
             if (rows != 1) {
                 Member reloaded = loginAllowed(members.findById(memberId), now);
@@ -60,6 +68,37 @@ public class LoginCompletionService {
             }
         }
         return issueSession(member.getId(), member.getRole().name(), now);
+    }
+
+    /**
+     * GOOGLE(MB-D025): OTP를 받은 주소(Challenge의 수신 주소)가 이제 서비스가 확인한 이메일이다. PENDING은 활성화와 함께,
+     * ACTIVE는 바뀐 경우에만 회원·연결 행 이메일을 같은 트랜잭션으로 갱신한다. 조건부 갱신이 0행이면 상태를 다시 확인한다.
+     * 갱신 뒤 로그인 세션 저장이 실패하면 LOCAL 활성화와 같이 DB 변경은 남고 인증 쿠키는 발급하지 않는다(다시 로그인).
+     */
+    private Member confirmGoogle(Member member, String deliveryEmail, Instant now) {
+        long memberId = member.getId();
+        if (deliveryEmail == null || deliveryEmail.isBlank()) {
+            throw rejected(MemberErrorCode.LOGIN_FAILED);
+        }
+        if (member.getAccountStatus() == AccountStatus.PENDING) {
+            if (googleAccounts.activatePending(memberId, deliveryEmail, now.minus(Member.PENDING_TTL), now) == 1) {
+                return active(loginAllowed(members.findById(memberId), now));
+            }
+            member = active(loginAllowed(members.findById(memberId), now));
+        }
+        if (!deliveryEmail.equals(member.getEmail())
+                && googleAccounts.updateActiveEmail(memberId, deliveryEmail, now) != 1) {
+            active(loginAllowed(members.findById(memberId), now));
+            throw rejected(MemberErrorCode.LOGIN_FAILED);
+        }
+        return member;
+    }
+
+    private static Member active(Member member) {
+        if (member.getAccountStatus() != AccountStatus.ACTIVE) {
+            throw rejected(MemberErrorCode.LOGIN_FAILED);
+        }
+        return member;
     }
 
     private CompletedLogin issueSession(long memberId, String role, Instant now) {

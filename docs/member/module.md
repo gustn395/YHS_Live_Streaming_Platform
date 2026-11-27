@@ -5,7 +5,8 @@
 ## 1. To-Be 설계
 
 - 계층 패키지(`in`·`app`·`domain`·`out`)를 쓴다([backend/README.md 5장](../../backend/README.md#5-모듈과-패키지-규칙)). `app`은 포트(`MemberRepository`)로만 `out`을 쓴다.
-- 회원가입(MB-W01~W04)은 2장 As-Is와 같다. Google(MB-W11)은 BE-05에서 설계한다.
+- 회원가입(MB-W01~W04)은 2장 As-Is와 같다.
+- Google 로그인(MB-W11, Issue #21): OAuth 전용 보안 체인에서 Google OIDC(Code+PKCE)를 1차 인증으로만 처리하고 기존 이메일 OTP·로그인 완료로 잇는다. 정책은 [MB-D023](decisions.md#1-확정-결정)~[MB-D025](decisions.md#1-확정-결정). 구현은 2장 "Google 로그인".
 - Refresh·로그아웃(MB-W09~W10, Issue #17): Refresh 쿠키 → 해시 조회 → 재사용 탐지 → 회원 재확인 → 같은 sid로 Rotation, 로그아웃은 Access sid·Refresh 해시로 찾은 세션 폐기. 정책은 [MB-D020](decisions.md#1-확정-결정)~[MB-D022](decisions.md#1-확정-결정). 구현은 2장 "Refresh·로그아웃".
 - 로그인·OTP·토큰(MB-W05~W08, Issue #13): 1차 인증 → OTP Challenge·이메일 OTP → 로그인 세션·토큰 쿠키 발급. 정책은 [MB-D011](decisions.md#1-확정-결정)~[MB-D019](decisions.md#1-확정-결정), CSRF는 [G-D014](../policy.md#3-공통-결정-이력). 클래스·Redis 키·설정 설계는 구현 계획에서 정하고 구현 뒤 2장 As-Is에 적는다.
 - `LoginSessionVerifier`(global 포트, G-D006·G-D007)는 member가 Redis 로그인 세션으로 구현한다.
@@ -14,25 +15,26 @@
 
 ## 2. As-Is
 
-2026-11-26, 브랜치 `feature/17-member-refresh-logout` 기준(회원가입은 #10, 로그인·OTP·토큰은 #13, Refresh·로그아웃은 #17).
+2026-11-27, 브랜치 `feature/21-member-google-oidc` 기준(회원가입은 #10, 로그인·OTP·토큰은 #13, Refresh·로그아웃은 #17, Google 로그인은 #21).
 
-- 빌드: [modules/member/build.gradle.kts](../../backend/modules/member/build.gradle.kts) — global, springdoc(Spec 어노테이션), `spring-boot-starter-data-redis`, `spring-boot-starter-mail`. 테스트: data-jpa-test, data-redis-test, Testcontainers PostgreSQL·Redis(GenericContainer)·Mailpit·JUnit, Flyway, PostgreSQL 드라이버.
+- 빌드: [modules/member/build.gradle.kts](../../backend/modules/member/build.gradle.kts) — global, springdoc(Spec 어노테이션), `spring-boot-starter-data-redis`, `spring-boot-starter-mail`, `spring-boot-starter-security-oauth2-client`(Google OIDC). 테스트: data-jpa-test, data-redis-test, Testcontainers PostgreSQL·Redis(GenericContainer)·Mailpit·JUnit, Flyway, PostgreSQL 드라이버.
 - 패키지와 클래스
 
 | 패키지 | 클래스 | 내용 |
 | --- | --- | --- |
-| `domain` | `Member`, `AccountType`, `AccountStatus`, `MemberRole` | `Member.registerLocal()`은 LOCAL·PENDING·이메일 미확인·USER로 만든다([MB-D003](decisions.md#1-확정-결정)) |
+| `domain` | `Member`, `AccountType`, `AccountStatus`, `MemberRole`, `OAuthAccount` | `Member.registerLocal()`은 LOCAL·PENDING·이메일 미확인·USER, `registerGoogle()`은 GOOGLE·PENDING·이메일 미확인·USER(username·비밀번호 없음)로 만든다([MB-D003](decisions.md#1-확정-결정), [MB-D025](decisions.md#1-확정-결정)). `OAuthAccount`는 `member_oauth_accounts` 연결 행 |
 | `app` | `SignupService`, `SignupCommand`, `SignupResult`, `MemberRepository`(포트), `MemberErrorCode` | 사전 중복 검사 → 유출 비밀번호 검사 → 비밀번호 해시 → 저장. HIBP 호출과 해시는 트랜잭션 밖. 중복은 409(`MEMBER_USERNAME_DUPLICATE`·`MEMBER_EMAIL_DUPLICATE`), 유출은 400 `MEMBER_PASSWORD_BREACHED`, 확인 불가는 503 `MEMBER_PASSWORD_CHECK_UNAVAILABLE`([MB-D010](decisions.md#1-확정-결정)) |
 | `app.password` | `MemberPasswordProperties`, `MemberPasswordConfig`, `PasswordHasher`(계약)·`Pbkdf2PasswordHasher`, `PasswordNormalization`(NFC 한 곳), `PasswordPolicy`, `PasswordViolation`, `BreachedPasswordChecker`(포트) | 해시·정책(길이·문맥 단어)·유출 검사 계약([MB-D004~D007](decisions.md#1-확정-결정), [MB-D010](decisions.md#1-확정-결정)) |
 | `app.login` | `LoginService`, `LoginCompletionService`, `CompletedLogin`, `RefreshService`, `LogoutService`, `MemberLoginConfig` | 1차 인증, OTP 성공 뒤 상태 재확인·활성화·세션 발급(아래 "로그인·OTP"), Refresh·로그아웃(아래 "Refresh·로그아웃") |
 | `app.otp` | `OtpService`, `LoginChallenge`, `OtpChallengeStarter`, `OtpCodes`, `MemberOtpProperties`, `OtpChallengeStore`(포트), `OtpMailSender`(포트), `MemberLookup`, `NewOtpChallenge`, `OtpChallengeSnapshot`, `OtpStoreResult`, `OtpResent` | OTP 발급·재발송·검증, 발송 실패 보상([MB-D015](decisions.md#1-확정-결정)·[MB-D016](decisions.md#1-확정-결정)) |
+| `app.oauth` | `GoogleLoginService`, `GoogleIdentity`, `GoogleNickname`, `GoogleAccountRepository`(포트), `GoogleLinkConflictException`, `OAuthStateStore`(포트), `OAuthFailure`, `OAuthLoginException` | Google 1차 인증 뒤 GOOGLE 회원 확인·자동 가입·재생성과 OTP 시작(아래 "Google 로그인") |
 | `app.limit` | `MemberLimitProperties`, `RequestRateLimiter`(포트), `LoginAttemptLimiter`(포트), `RateLimitScope` | 제한 수치·포트([MB-D017](decisions.md#1-확정-결정)·[MB-D018](decisions.md#1-확정-결정)) |
 | `app.session` | `LoginSessionStore`(포트: create·findRefresh·rotate·revoke), `NewLoginSession`, `RefreshTokenRecord`, `RefreshRotation`, `RandomTokens`, `MemberAccessTokenRoles` | 세션·Refresh 저장·교체·폐기 계약, 256비트 난수·SHA-256, JWT `role` 허용 값 |
 | `app.password` | `DummyPasswordHash` | 없는 username·GOOGLE 로그인의 같은 비용 비교 |
-| `out` | `MemberJpaRepository`, `MemberRepositoryAdapter`, `HibpPwnedPasswordsClient`, `HibpProperties`, `HibpClientConfig` | HIBP: 아래 "유출 비밀번호 검사". 저장: `saveAndFlush`로 즉시 INSERT하고, `uk_members_username`·`ux_members_local_email` 위반만 409로 바꾼다. 그 밖의 제약 위반은 제약 이름·SQLState만 WARN으로 남기고 원인 없는 `IllegalStateException`(500)으로 던진다(DB 상세에 든 개인정보를 응답·로그에 싣지 않으려고). 로그인용 `findByUsername`·`findById`, 조건부 UPDATE 2개(재해시: 기존 해시 조건, 활성화: PENDING·`created_at > now-24h` 조건, 둘 다 짧은 트랜잭션 하나) |
-| `out.redis` | `RedisLoginSessionStore`(+`LoginSessionVerifier` 구현), `RedisOtpChallengeStore`, `RedisLoginAttemptLimiter`, `RedisRequestRateLimiter`, `RedisLuaScripts`, `RedisKeys` | 아래 "Redis 키·Lua". Redis 오류는 인증 흐름 503 `AUTH_SESSION_STORE_UNAVAILABLE`, 요청 제한 503 `COMMON_RATE_LIMIT_UNAVAILABLE` |
+| `out` | `MemberJpaRepository`, `MemberRepositoryAdapter`, `OAuthAccountJpaRepository`, `GoogleAccountRepositoryAdapter`(트랜잭션 직접, provider·sub UNIQUE 충돌만 동시 가입으로 변환), `HibpPwnedPasswordsClient`, `HibpProperties`, `HibpClientConfig` | HIBP: 아래 "유출 비밀번호 검사". 저장: `saveAndFlush`로 즉시 INSERT하고, `uk_members_username`·`ux_members_local_email` 위반만 409로 바꾼다. 그 밖의 제약 위반은 제약 이름·SQLState만 WARN으로 남기고 원인 없는 `IllegalStateException`(500)으로 던진다(DB 상세에 든 개인정보를 응답·로그에 싣지 않으려고). 로그인용 `findByUsername`·`findById`, 조건부 UPDATE 2개(재해시: 기존 해시 조건, 활성화: PENDING·`created_at > now-24h` 조건, 둘 다 짧은 트랜잭션 하나) |
+| `out.redis` | `RedisLoginSessionStore`(+`LoginSessionVerifier` 구현), `RedisOtpChallengeStore`, `RedisOAuthStateStore`, `RedisLoginAttemptLimiter`, `RedisRequestRateLimiter`, `RedisLuaScripts`, `RedisKeys` | 아래 "Redis 키·Lua". Redis 오류는 인증 흐름 503 `AUTH_SESSION_STORE_UNAVAILABLE`, 요청 제한 503 `COMMON_RATE_LIMIT_UNAVAILABLE` |
 | `out.mail` | `SmtpOtpMailSender`, `MemberOtpMailProperties`, `MemberMailConfig`, `OtpDeliveryException` | SMTP 동기 발송, 실패는 원인·주소·OTP 없는 예외 |
-| `in` | `ApiV1AuthController`, `ApiV1AuthSpec`, `AuthCookieWriter`, `MemberAuthCookies`(Refresh·Challenge 쿠키 이름·Refresh Path), `ClientIp`, `dto/SignupRequest`·`SignupResponse`·`LoginRequest`·`OtpVerifyRequest`·`OtpRequiredResponse`·`LoginSuccessResponse`, `ValidSignupPassword`, `SignupPasswordValidator`, `MemberPublicEndpoints` | 가입·로그인·OTP·Refresh·로그아웃 API. IP 제한은 가입·로그인·OTP·Refresh에서 서비스보다 먼저 건다(로그아웃은 IP 제한 없음, MB-D022). 쿠키 발급·삭제는 `AuthCookieWriter` 한 곳(HttpOnly·Secure·Strict·Domain 없음, Max-Age = 만료까지 남은 초 올림). 공개 경로(Access 인증 없이 호출, 모두 CSRF 필요): signup·login·otp/verify·otp/resend·refresh·logout |
+| `in` | `ApiV1AuthController`, `ApiV1AuthSpec`, `AuthCookieWriter`, `MemberAuthCookies`(Refresh·Challenge 쿠키 이름·Refresh Path), `ClientIp`, `dto/SignupRequest`·`SignupResponse`·`LoginRequest`·`OtpVerifyRequest`·`OtpRequiredResponse`·`LoginSuccessResponse`, `ValidSignupPassword`, `SignupPasswordValidator`, `MemberPublicEndpoints`, Google: `MemberOAuthSecurityConfig`, `MemberOAuthProperties`, `OAuthCookieAuthorizationRequestRepository`, `GoogleLoginSuccessHandler`, `GoogleLoginFailureHandler`, `OAuthRateLimitFilter`, `OAuthRedirects` | 가입·로그인·OTP·Refresh·로그아웃 API. IP 제한은 가입·로그인·OTP·Refresh에서 서비스보다 먼저 건다(로그아웃은 IP 제한 없음, MB-D022). 쿠키 발급·삭제는 `AuthCookieWriter` 한 곳(HttpOnly·Secure·Strict·Domain 없음, Max-Age = 만료까지 남은 초 올림). 공개 경로(Access 인증 없이 호출, 모두 CSRF 필요): signup·login·otp/verify·otp/resend·refresh·logout |
 
 - 비밀번호 해시 포맷: `pbkdf2-sha256$v1$nfc$i=<반복 횟수>$k=<키 ID>$<Salt Base64>$<해시 Base64>`. Salt 16바이트(SecureRandom), PBKDF2 출력 256비트, 최종 HMAC-SHA256(pepper) 256비트, Base64는 패딩 없음. 검증은 `MessageDigest.isEqual`(일정 시간). 포맷 오류·키 ID 불일치는 불일치로 처리한다.
 - 비밀번호 정책: NFC 뒤 code point 15~64자. 문맥 단어 판정은 "소문자 → 글자·숫자만 → 끝 숫자 제거"한 핵심어가 username·서비스 이름(`yhslivestreaming`·`yhslive`·`livestreaming`·`yhs`)의 핵심어와 같으면(뒤집은 경우 포함) 거부한다. 끝 숫자는 code point 단위로 뗀다. 또 글자·숫자만 남긴 값(끝 숫자를 떼기 전)이 username과 같거나 뒤집어 같으면 거부한다(숫자·밑줄만인 username 대비). 대소문자는 구분하지 않는다.
@@ -63,6 +65,19 @@
 - 로그아웃(`LogoutService`): Access sid는 `@AuthenticationPrincipal AuthenticatedMember`(global 필터가 JWT 전체 검증 + 세션 소유자 확인을 통과시킨 경우만), Refresh는 `findRefresh`(USED 포함). sid를 모아 `revoke`(소유 회원 확인). 성공하면 Access·Refresh·Challenge 쿠키 삭제 + `CsrfTokenRenewer`. 저장소 장애는 예외(503)로 끝나 쿠키·CSRF가 남는다. 필터 단계의 세션 확인 장애도 503이다.
 - global 변경: CSRF 세션 인증 전략을 `NullAuthenticatedSessionStrategy`로 바꿨다. 기본 전략이 인증된 POST마다 `XSRF-TOKEN`을 지워 MB-D020·D022를 깨뜨렸다([docs/global/module.md](../global/module.md) 2장, GL-T018).
 
+### Google 로그인 (BE-05)
+
+- 결정: [MB-D023](decisions.md#1-확정-결정)~[MB-D025](decisions.md#1-확정-결정). 경로: 시작 `GET /api/v1/auth/oauth2/authorization/google`, 콜백 `GET /api/v1/auth/oauth2/code/google`(Spring Security 필터가 처리하므로 Swagger 문서에는 없다).
+- 보안 체인(`MemberOAuthSecurityConfig`): global 체인보다 먼저(`@Order(HIGHEST_PRECEDENCE + 100)`), 위 두 GET 경로만 `securityMatcher`로 맡는다(그 밖의 OAuth 하위 경로·메서드는 global 체인에서 401). STATELESS, `NullSecurityContextRepository`, RequestCache·httpBasic·formLogin·logout 끔, CSRF 끔(GET 이동만, 로그인 CSRF는 state + 쿠키 묶음), 보안 헤더는 Spring 기본값(global과 같음). `oauth2Login`: PKCE(S256) 강제(`OAuth2AuthorizationRequestCustomizers.withPkce()`), nonce는 Spring 기본, AuthorizedClient 저장 없음(`NoStoreAuthorizedClientRepository`), Token Endpoint 호출은 연결 3초·읽기 5초 제한(`RestClientAuthorizationCodeTokenResponseClient`), UserInfo 호출 없음(ID Token 값만). global 코드는 바꾸지 않았다.
+- 등록: `ClientRegistration` "google"은 `MemberOAuthProperties`에서 만든다(Client ID·Secret, Redirect URI = 공개 Base URL + 콜백 경로, scope openid·email·profile, 엔드포인트 기본값 Google, 테스트만 가짜 공급자). 기동할 때 Google에 접속하지 않는다.
+- 임시 상태(`OAuthCookieAuthorizationRequestRepository` + `RedisOAuthStateStore`): 시작 때 256비트 id를 `__Host-yhs_oauth`(Lax, 10분)로 주고 `auth:oauth:{sha256(id)}` HASH에 인증 요청 필드(state, nonce·PKCE verifier 등 `ap.*`·`at.*`)를 저장한다(TTL 10분, Java 직렬화 없음, 설계에서 말한 JSON 대신 HASH 필드). 콜백의 `removeAuthorizationRequest`가 쿠키 id와 state가 맞을 때만 `oauth_take.lua`로 원자 소비한다. 다르면(늦은 콜백) 지우지 않는다. 소비했을 때만 처리기가 쿠키를 지운다. 저장 실패면 시작 리다이렉트 전략이 Google 대신 실패 화면으로 보낸다.
+- 경합 보장 범위: 콜백 요청 시점의 브라우저 쿠키 기준이다. 이미 처리 중인 이전 콜백의 지연된 쿠키 삭제가 새 시작의 쿠키를 지우면 새 콜백은 `oauth_failed`이고 다시 시작하면 된다. OTP Challenge 쿠키도 마지막 응답의 것이 남으며, 검증은 그 Challenge의 회원으로만 끝난다(다른 회원으로 인증되지 않음, 기존 로그인 세션 폐기 없음).
+- 성공(`GoogleLoginSuccessHandler` → `GoogleLoginService`): claim `email_verified` 확인 → sub로 회원 확인·자동 가입(`GoogleAccountRepositoryAdapter.create`, 충돌이면 다시 조회)·만료 PENDING 재생성(`replaceExpiredPending`) → DISABLED 거부 → 이번 Google 이메일로 `OtpChallengeStarter.startForLogin(member, email)` → `__Host-yhs_otp` 발급, OTP 화면 302. 인증 쿠키·로그인 세션·CSRF 갱신 없음, SecurityContext 비움.
+- 실패(`GoogleLoginFailureHandler`, 성공 처리기의 예외 변환): 오류 코드는 MB-D024의 6개. OAuth 오류 코드 `server_error`·저장소 장애, 원인 체인의 IOException·`ResourceAccessException`·`HttpServerErrorException`·Nimbus `KeySourceException`은 `temporarily_unavailable`, 그 밖의 OAuth 실패는 `oauth_failed`. 로그는 사유 코드·OAuth 오류 코드·예외 종류만 남긴다.
+- IP 제한(`OAuthRateLimitFilter`, 체인 안에 `new`로 한 번 등록): 시작은 `oauth-start`(기본 10분 30회), 콜백은 `login` 범위(LOCAL과 공유). 시작 여부는 보안 체인과 같은 `PathPatternRequestMatcher`로 판별한다(context path 제외·디코딩 경로). `OAuth2AuthorizationRequestRedirectFilter` 앞이라 임시 상태 저장·토큰 교환 전에 막는다.
+- OTP 연계: Challenge에 수신 주소(`deliveryEmail`)를 저장하고 재발송도 그 주소로 보낸다. `OtpService.verify`는 `VerifiedOtp(memberId, deliveryEmail)`를 돌려주고, `LoginCompletionService`는 GOOGLE이면 PENDING 활성화와 함께(`activatePending`) 또는 ACTIVE면 바뀐 경우에만(`updateActiveEmail`) 회원·연결 행 이메일을 같은 트랜잭션으로 갱신한다(연결 행 → 회원 행 순서로, 만료 PENDING 교체의 삭제 순서와 같게 잠가 경계 경합에서 교착하지 않음. 둘 중 하나라도 1행이 아니면 전체 롤백). 갱신 뒤 세션 저장이 실패하면 LOCAL과 같이 DB 변경은 남고 인증 쿠키는 없다(다시 로그인). 수신 주소가 없는 이전 Challenge는 찾지 못한 것으로 본다.
+- 설정: 환경변수 `GOOGLE_CLIENT_ID`·`GOOGLE_CLIENT_SECRET`·`MEMBER_OAUTH_PUBLIC_BASE_URL`(app `application.yml`, 없거나 비면 기동 실패, https 출처만이고 http는 loopback 호스트만), Google 엔드포인트(`member.oauth.google.authorization-uri`·`token-uri`·`jwk-set-uri`, 기본 Google 값)는 https만(http는 loopback만), `member.oauth.otp-redirect`(기본 `/login/otp`)·`failure-redirect`(기본 `/login`)는 같은 출처 경로만, `member.limits.oauth-start`.
+
 ### Redis 키·Lua
 
 username·IP는 SHA-256 hex로 키에 쓴다. 원문이 키 목록에 남지 않게 하려는 것이며 입력 공간이 작아 사전 대입으로 되돌릴 수 있으므로 익명화로 보지 않는다. `otp_issue.lua`는 이전 Challenge 키를 포인터에서 읽어 지우므로 단일 Redis(클러스터 아님)를 전제한다.
@@ -71,20 +86,22 @@ username·IP는 SHA-256 hex로 키에 쓴다. 원문이 키 목록에 남지 않
 | --- | --- | --- | --- |
 | `auth:session:{sid}` | HASH | memberId, refreshHash(현재 Refresh 해시), expiresAt(ms) | 절대 만료(PEXPIREAT, 7일, Rotation으로 연장 없음) |
 | `auth:refresh:{sha256(refresh)}` | HASH | sid, memberId, expiresAt. 세션의 현재 해시와 다르면 USED(별도 상태 값 없음) | 같은 절대 만료(이전 해시 키도 만료까지 남음) |
-| `auth:otp:challenge:{challengeId}` | HASH | memberId, version, otpHmac(무효면 빈 값), keyId, attempts, otpExpiresAt, challengeExpiresAt, confirmed(발송 성공 확인 0/1), sentDigest·prevSentDigest(최근 숫자 지문 2개) | Challenge 절대 10분 |
+| `auth:otp:challenge:{challengeId}` | HASH | memberId, version, otpHmac(무효면 빈 값), keyId, attempts, otpExpiresAt, challengeExpiresAt, confirmed(발송 성공 확인 0/1), sentDigest·prevSentDigest(최근 숫자 지문 2개), deliveryEmail(수신 주소) | Challenge 절대 10분 |
+| `auth:oauth:{sha256(쿠키 난수)}` | HASH | state, authorizationUri, clientId, redirectUri, scopes, authorizationRequestUri, `ap.*`(인가 요청 파라미터), `at.*`(nonce·code_verifier 등 속성) | 10분 |
 | `auth:otp:member:{id}:current` | STRING | 현재 challengeId | Challenge 만료까지 |
 | `auth:otp:member:{id}:last-issued` | STRING | 60초 발급 간격 | 60초 |
 | `auth:otp:member:{id}:issue:1h`·`issue:24h` | 카운터 | 발급 수(새 로그인 + 재발송) | 첫 증가부터 1시간·24시간 |
 | `auth:otp:member:{id}:fail:24h` | 카운터 | OTP 검증 실패 합산 | 첫 증가부터 24시간 |
 | `auth:login:fail:{sha256(username)}` | 카운터 | 연속 실패 | 마지막 실패 + 24시간 |
 | `auth:login:block:{sha256(username)}` | STRING | 차단 | 15분(연장 없음) |
-| `ratelimit:{signup\|login\|otp\|refresh}:{sha256(ip)}` | 카운터 | IP 요청 수 | 첫 요청부터 1시간·10분·10분·10분 |
+| `ratelimit:{signup\|login\|otp\|refresh\|oauth-start}:{sha256(ip)}` | 카운터 | IP 요청 수(Google 콜백은 login) | 첫 요청부터 1시간·10분·10분·10분·10분 |
 
 | Lua(`src/main/resources/redis/member`) | 원자 처리 범위 |
 | --- | --- |
 | `session_create` | 두 키가 모두 없을 때만 HSET + PEXPIREAT 2쌍. 모든 확인을 쓰기 전에 끝낸다. 결과를 확인하지 못하면(예외·null) 인증 쿠키를 주지 않는다 |
 | `refresh_rotate` | 첫 쓰기 전에 이전 키 자료형·sid·memberId, 세션 자료형·회원·절대 만료(조회 값과 같고 지나지 않음)·현재 해시, 새 키 충돌을 모두 확인. USED면 세션과 (같은 sid인) 현재 Refresh 키 삭제. 쓰기는 새 Refresh 키(HSET + PEXPIREAT = 세션 만료) → 세션 `refreshHash` 순서라 중간에 멈춰도 새 토큰은 쓰이지 않는다. 세션이 없으면 만들지 않는다 |
 | `session_revoke` | 세션 회원이 같을 때만 세션 삭제 + 현재 Refresh 키(같은 sid일 때만) 삭제. 없으면 0, 다른 회원이면 아무것도 지우지 않음 |
+| `oauth_save` / `oauth_take` | 임시 상태 저장(DEL·HSET·PEXPIRE) / state가 같을 때만 HGETALL(+소비면 DEL), 자료형이 다르면 없음 |
 | `rate_limit` | INCR → 첫 값이면 PEXPIRE, TTL 없는 키 보정, 초과면 남은 ms |
 | `login_fail` / `login_success` | 차단 중이면 세지 않음 / 차단 키 생성 + 카운터 삭제 / 성공 시 차단 확인 뒤 카운터 삭제 |
 | `otp_issue` / `otp_resend` / `otp_verify` / `otp_confirm_delivered` / `otp_delivery_failed` | 위 "로그인·OTP" 참조. 새 OTP는 발송 확인 전 검증 불가 |
@@ -115,7 +132,7 @@ username·IP는 SHA-256 hex로 키에 쓴다. 원문이 키 목록에 남지 않
 | `members` | `id` BIGINT IDENTITY PK, `username` VARCHAR(50) NULL, `password_hash` VARCHAR(255) NULL, `email` VARCHAR(255) NOT NULL, `email_verified` BOOLEAN NOT NULL, `nickname` VARCHAR(50) NOT NULL, `role` VARCHAR(20) NOT NULL, `account_type` VARCHAR(20) NOT NULL, `account_status` VARCHAR(20) NOT NULL, `created_at`·`updated_at` TIMESTAMPTZ NOT NULL | UNIQUE `uk_members_username`(username). CHECK `ck_members_account_type`(LOCAL·GOOGLE), `ck_members_account_status`(PENDING·ACTIVE·DISABLED), `ck_members_local_credentials`(LOCAL이면 username·password_hash 필수). 부분 유니크 인덱스 `ux_members_local_email`(email, `account_type='LOCAL'`) |
 | `member_oauth_accounts` | `id` BIGINT IDENTITY PK, `member_id` BIGINT NOT NULL, `provider` VARCHAR(30) NOT NULL, `provider_user_id` VARCHAR(255) NOT NULL, `email` VARCHAR(255) NULL, `created_at` TIMESTAMPTZ NOT NULL | FK `fk_member_oauth_accounts_member`, UNIQUE `uk_member_oauth_accounts_provider_user`(provider, provider_user_id) |
 
-- 명세와 다른 점: 명세 3.2는 `member_oauth_accounts.member_id`의 NULL 허용 여부를 적지 않았다. 연결 행은 반드시 회원에 속하므로 NOT NULL로 두었다. 엔티티(`OAuthAccount`)는 BE-05에서 만든다.
+- 명세와 다른 점: 명세 3.2는 `member_oauth_accounts.member_id`의 NULL 허용 여부를 적지 않았다. 연결 행은 반드시 회원에 속하므로 NOT NULL로 두었다. 엔티티는 `OAuthAccount`(BE-05, Issue #21)이고 스키마 변경은 없었다.
 
 ## 6. REST API
 
@@ -126,6 +143,8 @@ username·IP는 SHA-256 hex로 키에 쓴다. 원문이 키 목록에 남지 않
 | POST | `/api/v1/auth/otp/resend` | 공개(CSRF, Challenge 쿠키) | 200 `OtpRequiredResponse` | 401 `AUTH_OTP_CHALLENGE_INVALID`, 403 `AUTH_CSRF_INVALID`, 429 `AUTH_OTP_RATE_LIMITED`·`COMMON_TOO_MANY_REQUESTS`, 503 |
 | POST | `/api/v1/auth/otp/verify` | 공개(CSRF, Challenge 쿠키) | 200 `LoginSuccessResponse(memberId, role, accessTokenExpiresAt)` + `__Host-yhs_at`·`__Secure-yhs_rt`·새 `XSRF-TOKEN`, Challenge 쿠키 삭제 | 400 `COMMON_INVALID_INPUT`, 401 `AUTH_OTP_MISMATCH`·`AUTH_OTP_EXPIRED`·`AUTH_OTP_CHALLENGE_INVALID`·`AUTH_LOGIN_FAILED`, 403 `MEMBER_ACCOUNT_DISABLED`·`AUTH_CSRF_INVALID`, 429 `AUTH_OTP_RATE_LIMITED`·`COMMON_TOO_MANY_REQUESTS`, 503(인증 쿠키 없음) |
 | POST | `/api/v1/auth/refresh` | 공개(CSRF, Refresh 쿠키, IP 제한) | 200 `LoginSuccessResponse` + 새 `__Host-yhs_at`·`__Secure-yhs_rt`(CSRF 토큰은 그대로) | 401 `AUTH_REFRESH_INVALID`·403 `MEMBER_ACCOUNT_DISABLED`(둘 다 Access·Refresh 쿠키 삭제), 403 `AUTH_CSRF_INVALID`, 429 `COMMON_TOO_MANY_REQUESTS`, 500 `COMMON_INTERNAL_ERROR`(회원 조회 장애), 503 `COMMON_RATE_LIMIT_UNAVAILABLE`(IP 제한 단계)·`AUTH_SESSION_STORE_UNAVAILABLE`(세션 저장소 단계). 401·403(회원 상태) 외에는 쿠키 유지 |
+| GET | `/api/v1/auth/oauth2/authorization/google` | 공개(OAuth 체인, IP 제한) | 302 Google 인가 + `__Host-yhs_oauth`(Lax) | 302 `/login?error=rate_limited`·`temporarily_unavailable` |
+| GET | `/api/v1/auth/oauth2/code/google` | 공개(OAuth 체인, state+쿠키, IP 제한=login) | 302 OTP 화면 + `__Host-yhs_otp`, `__Host-yhs_oauth` 삭제(인증 쿠키 없음) | 302 `/login?error=` oauth_failed·oauth_email_unverified·account_disabled·rate_limited·otp_delivery_failed·temporarily_unavailable |
 | POST | `/api/v1/auth/logout` | 공개(CSRF, IP 제한 없음) | 204 + Access·Refresh·Challenge 쿠키 삭제 + 새 `XSRF-TOKEN` | 403 `AUTH_CSRF_INVALID`, 503 `AUTH_SESSION_STORE_UNAVAILABLE`(쿠키·CSRF 유지) |
 
 - `GET /api/v1/auth/csrf`(CSRF 토큰 초기 발급)는 global이 제공한다([docs/global/module.md](../global/module.md)).

@@ -56,7 +56,10 @@ public class OtpService implements OtpChallengeStarter {
     }
 
     @Override
-    public LoginChallenge startForLogin(Member member) {
+    public LoginChallenge startForLogin(Member member, String deliveryEmail) {
+        if (deliveryEmail == null || deliveryEmail.isBlank()) {
+            throw new IllegalArgumentException("OTP 수신 주소가 비어 있다");
+        }
         Instant now = clock.instant();
         Instant otpExpiresAt = now.plus(OTP_TTL);
         Instant challengeExpiresAt = now.plus(CHALLENGE_TTL);
@@ -65,10 +68,11 @@ public class OtpService implements OtpChallengeStarter {
             String code = codes.newCode();
             OtpStoreResult result = store.issueForLogin(new NewOtpChallenge(challengeId, member.getId(),
                     codes.hmac(challengeId, 1, code), codes.digest(challengeId, code), codes.keyId(), otpExpiresAt,
-                    challengeExpiresAt), now);
+                    challengeExpiresAt, deliveryEmail), now);
             switch (result.status()) {
                 case OK -> {
-                    deliver(member, code, otpExpiresAt, challengeId, result.version(), DeliveryStage.LOGIN);
+                    deliver(member, deliveryEmail, code, otpExpiresAt, challengeId, result.version(),
+                            DeliveryStage.LOGIN);
                     return new LoginChallenge(challengeId, otpExpiresAt, challengeExpiresAt);
                 }
                 case INTERVAL_LIMITED, ISSUE_LIMITED, FAILURE_LIMITED -> throw limited(result.retryAfter());
@@ -81,7 +85,7 @@ public class OtpService implements OtpChallengeStarter {
     }
 
     public OtpResent resend(String challengeId) {
-        OtpChallengeSnapshot current = store.find(challengeId).orElseThrow(OtpService::challengeInvalid);
+        OtpChallengeSnapshot current = usable(store.find(challengeId));
         Member member = memberLookup.findById(current.memberId()).orElseThrow(OtpService::challengeInvalid);
         Instant now = clock.instant();
         Instant otpExpiresAt = min(now.plus(OTP_TTL), current.challengeExpiresAt());
@@ -91,7 +95,8 @@ public class OtpService implements OtpChallengeStarter {
                 codes.digest(challengeId, code), codes.keyId(), otpExpiresAt, now);
         switch (result.status()) {
             case OK -> {
-                deliver(member, code, otpExpiresAt, challengeId, result.version(), DeliveryStage.RESEND);
+                deliver(member, current.deliveryEmail(), code, otpExpiresAt, challengeId, result.version(),
+                        DeliveryStage.RESEND);
                 return new OtpResent(otpExpiresAt);
             }
             case INTERVAL_LIMITED, ISSUE_LIMITED, FAILURE_LIMITED -> throw limited(result.retryAfter());
@@ -101,13 +106,13 @@ public class OtpService implements OtpChallengeStarter {
         }
     }
 
-    /** @return OTP를 확인한 회원 ID. Challenge는 소비됐다. */
-    public long verify(String challengeId, String code) {
-        OtpChallengeSnapshot current = store.find(challengeId).orElseThrow(OtpService::challengeInvalid);
+    /** @return OTP를 확인한 회원과 그 Challenge에 묶인 수신 주소. Challenge는 소비됐다. */
+    public VerifiedOtp verify(String challengeId, String code) {
+        OtpChallengeSnapshot current = usable(store.find(challengeId));
         OtpStoreResult result = store.verify(current, codes.hmac(challengeId, current.version(), code),
                 clock.instant());
         return switch (result.status()) {
-            case OK -> result.memberId();
+            case OK -> new VerifiedOtp(result.memberId(), current.deliveryEmail());
             case MISMATCH -> throw rejected(MemberErrorCode.OTP_MISMATCH, MemberErrorCode.OTP_MISMATCH.detail());
             case EXPIRED -> throw rejected(MemberErrorCode.OTP_EXPIRED, MemberErrorCode.OTP_EXPIRED.detail());
             case EXHAUSTED -> throw rejected(MemberErrorCode.OTP_EXPIRED, MemberErrorCode.OTP_EXHAUSTED_DETAIL);
@@ -117,10 +122,19 @@ public class OtpService implements OtpChallengeStarter {
         };
     }
 
-    private void deliver(Member member, String code, Instant expiresAt, String challengeId, int version,
-                         DeliveryStage stage) {
+    /** 수신 주소가 없는 Challenge(이 필드가 생기기 전에 만든 것)는 쓰지 않는다. 다시 로그인하면 된다. */
+    private static OtpChallengeSnapshot usable(java.util.Optional<OtpChallengeSnapshot> found) {
+        OtpChallengeSnapshot current = found.orElseThrow(OtpService::challengeInvalid);
+        if (current.deliveryEmail() == null || current.deliveryEmail().isBlank()) {
+            throw challengeInvalid();
+        }
+        return current;
+    }
+
+    private void deliver(Member member, String deliveryEmail, String code, Instant expiresAt, String challengeId,
+                         int version, DeliveryStage stage) {
         try {
-            mail.send(member.getEmail(), code, expiresAt);
+            mail.send(deliveryEmail, code, expiresAt);
         } catch (RuntimeException ex) {
             boolean compensated = compensate(challengeId, version, stage);
             log.warn("OTP 메일 발송 실패: memberId={}, stage={}, compensated={}, cause={}", member.getId(), stage,

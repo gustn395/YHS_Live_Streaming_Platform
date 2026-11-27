@@ -76,6 +76,23 @@ public class Member extends BaseTimeEntity {
     }
 
     /**
+     * Google로 처음 로그인한 회원을 만든다(MB-D025). username·비밀번호가 없고, 서비스 자체 이메일 확인(OTP) 전이므로
+     * PENDING·이메일 미확인·USER로 시작한다. 이메일·닉네임은 정규화된 값을 받는다.
+     */
+    public static Member registerGoogle(String email, String nickname) {
+        requireText(email, "email");
+        requireText(nickname, "nickname");
+        Member member = new Member();
+        member.email = email;
+        member.nickname = nickname;
+        member.emailVerified = false;
+        member.role = MemberRole.USER;
+        member.accountType = AccountType.GOOGLE;
+        member.accountStatus = AccountStatus.PENDING;
+        return member;
+    }
+
+    /**
      * PENDING 유지 기간(MB-D003): 가입 시각 기준 24시간, 연장 없음. 이 시각이 지나면 로그인할 수 없고 정리 대상이다.
      */
     public static final Duration PENDING_TTL = Duration.ofHours(24);
