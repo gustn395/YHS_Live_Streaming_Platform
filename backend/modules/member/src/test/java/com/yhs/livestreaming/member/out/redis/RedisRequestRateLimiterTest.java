@@ -20,7 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.redis.test.autoconfigure.DataRedisTest;
 
 /**
- * MB-T028: IP 기준 요청 제한(MB-D018). Redis 고정 창(Lua INCR + PEXPIRE 원자 처리), 초과 시 429 + Retry-After,
+ * MB-T028: IP 기준 요청 제한(MB-D018, 가입 수치 MB-D027). Redis 고정 창(Lua INCR + PEXPIRE 원자 처리), 초과 시 429 + Retry-After,
  * 저장소 장애 시 503(MB-D019).
  */
 @DataRedisTest
@@ -34,17 +34,36 @@ class RedisRequestRateLimiterTest extends RedisTestSupport {
     }
 
     @Test
-    void signupAllowsFivePerHourPerIpThenRejectsWithRetryAfter() {
+    void signupAllowsTwentyPerTenMinutesPerIpThenRejectsWithRetryAfter() { // MB-D027
         RedisRequestRateLimiter limiter = limiter();
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 20; i++) {
             limiter.acquire(RateLimitScope.SIGNUP, "203.0.113.7");
         }
 
         assertThatThrownBy(() -> limiter.acquire(RateLimitScope.SIGNUP, "203.0.113.7"))
                 .isInstanceOfSatisfying(TooManyRequestsException.class, ex -> {
                     assertThat(ex.errorCode()).isEqualTo(CommonErrorCode.TOO_MANY_REQUESTS);
-                    assertThat(ex.retryAfter()).isPositive().isLessThanOrEqualTo(Duration.ofHours(1));
+                    assertThat(ex.retryAfter()).isPositive().isLessThanOrEqualTo(Duration.ofMinutes(10));
                 });
+        String key = template.keys("ratelimit:signup:*").iterator().next();
+        assertThat(template.getExpire(key)).isBetween(1L, Duration.ofMinutes(10).toSeconds());
+    }
+
+    @Test
+    void rejectedRequestsDoNotExtendTheWindowAndRetryAfterIsTheRemainingTtl() { // MB-D027
+        RedisRequestRateLimiter limiter = limiter();
+        for (int i = 0; i < 20; i++) {
+            limiter.acquire(RateLimitScope.SIGNUP, "203.0.113.7");
+        }
+        String key = template.keys("ratelimit:signup:*").iterator().next();
+        template.expire(key, Duration.ofSeconds(5));
+
+        for (int i = 0; i < 3; i++) {
+            assertThatThrownBy(() -> limiter.acquire(RateLimitScope.SIGNUP, "203.0.113.7"))
+                    .isInstanceOfSatisfying(TooManyRequestsException.class,
+                            ex -> assertThat(ex.retryAfter()).isPositive().isLessThanOrEqualTo(Duration.ofSeconds(5)));
+        }
+        assertThat(template.getExpire(key)).isBetween(1L, 5L);
     }
 
     @Test
@@ -65,9 +84,11 @@ class RedisRequestRateLimiterTest extends RedisTestSupport {
     @Test
     void ipsAndScopesAreCountedSeparately() {
         RedisRequestRateLimiter limiter = limiter();
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 20; i++) {
             limiter.acquire(RateLimitScope.SIGNUP, "203.0.113.7");
         }
+        assertThatThrownBy(() -> limiter.acquire(RateLimitScope.SIGNUP, "203.0.113.7"))
+                .isInstanceOf(TooManyRequestsException.class);
 
         limiter.acquire(RateLimitScope.SIGNUP, "203.0.113.8");
         limiter.acquire(RateLimitScope.LOGIN, "203.0.113.7");
@@ -101,7 +122,7 @@ class RedisRequestRateLimiterTest extends RedisTestSupport {
         ExecutorService pool = Executors.newFixedThreadPool(8);
         try {
             List<Callable<Boolean>> calls = new ArrayList<>();
-            for (int i = 0; i < 20; i++) {
+            for (int i = 0; i < 40; i++) {
                 calls.add(() -> {
                     try {
                         limiter.acquire(RateLimitScope.SIGNUP, "203.0.113.9");
@@ -117,7 +138,7 @@ class RedisRequestRateLimiterTest extends RedisTestSupport {
                     allowed++;
                 }
             }
-            assertThat(allowed).isEqualTo(5);
+            assertThat(allowed).isEqualTo(20);
         } finally {
             pool.shutdownNow();
         }

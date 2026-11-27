@@ -21,7 +21,7 @@ public record SignupRequest(
         @Pattern(regexp = "^[a-z0-9_]{4,20}$", message = "아이디는 영문 소문자·숫자·_ 4~20자입니다.")
         String username,
 
-        @Schema(description = "비밀번호. 15~64자, 구성 규칙 없음, 공백 허용", example = "correct horse battery staple")
+        @Schema(description = "비밀번호. 10~30자(NFC 정규화 뒤 code point 기준), 구성 규칙 없음, 공백 허용", example = "correct horse battery staple")
         @NotNull
         String password,
 

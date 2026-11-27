@@ -28,7 +28,7 @@
 | `app.login` | `LoginService`, `LoginCompletionService`, `CompletedLogin`, `RefreshService`, `LogoutService`, `MemberLoginConfig` | 1차 인증, OTP 성공 뒤 상태 재확인·활성화·세션 발급(아래 "로그인·OTP"), Refresh·로그아웃(아래 "Refresh·로그아웃") |
 | `app.otp` | `OtpService`, `LoginChallenge`, `OtpChallengeStarter`, `OtpCodes`, `MemberOtpProperties`, `OtpChallengeStore`(포트), `OtpMailSender`(포트), `MemberLookup`, `NewOtpChallenge`, `OtpChallengeSnapshot`, `OtpStoreResult`, `OtpResent` | OTP 발급·재발송·검증, 발송 실패 보상([MB-D015](decisions.md#1-확정-결정)·[MB-D016](decisions.md#1-확정-결정)) |
 | `app.oauth` | `GoogleLoginService`, `GoogleIdentity`, `GoogleNickname`, `GoogleAccountRepository`(포트), `GoogleLinkConflictException`, `OAuthStateStore`(포트), `OAuthFailure`, `OAuthLoginException` | Google 1차 인증 뒤 GOOGLE 회원 확인·자동 가입·재생성과 OTP 시작(아래 "Google 로그인") |
-| `app.limit` | `MemberLimitProperties`, `RequestRateLimiter`(포트), `LoginAttemptLimiter`(포트), `RateLimitScope` | 제한 수치·포트([MB-D017](decisions.md#1-확정-결정)·[MB-D018](decisions.md#1-확정-결정)) |
+| `app.limit` | `MemberLimitProperties`, `RequestRateLimiter`(포트), `LoginAttemptLimiter`(포트), `RateLimitScope` | 제한 수치·포트([MB-D017](decisions.md#1-확정-결정)·[MB-D018](decisions.md#1-확정-결정)·[MB-D027](decisions.md#1-확정-결정)) |
 | `app.session` | `LoginSessionStore`(포트: create·findRefresh·rotate·revoke), `NewLoginSession`, `RefreshTokenRecord`, `RefreshRotation`, `RandomTokens`, `MemberAccessTokenRoles` | 세션·Refresh 저장·교체·폐기 계약, 256비트 난수·SHA-256, JWT `role` 허용 값 |
 | `app.password` | `DummyPasswordHash` | 없는 username·GOOGLE 로그인의 같은 비용 비교 |
 | `out` | `MemberJpaRepository`, `MemberRepositoryAdapter`, `OAuthAccountJpaRepository`, `GoogleAccountRepositoryAdapter`(트랜잭션 직접, provider·sub UNIQUE 충돌만 동시 가입으로 변환), `HibpPwnedPasswordsClient`, `HibpProperties`, `HibpClientConfig` | HIBP: 아래 "유출 비밀번호 검사". 저장: `saveAndFlush`로 즉시 INSERT하고, `uk_members_username`·`ux_members_local_email` 위반만 409로 바꾼다. 그 밖의 제약 위반은 제약 이름·SQLState만 WARN으로 남기고 원인 없는 `IllegalStateException`(500)으로 던진다(DB 상세에 든 개인정보를 응답·로그에 싣지 않으려고). 로그인용 `findByUsername`·`findById`, 조건부 UPDATE 2개(재해시: 기존 해시 조건, 활성화: PENDING·`created_at > now-24h` 조건, 둘 다 짧은 트랜잭션 하나) |
@@ -37,7 +37,7 @@
 | `in` | `ApiV1AuthController`, `ApiV1AuthSpec`, `AuthCookieWriter`, `MemberAuthCookies`(Refresh·Challenge 쿠키 이름·Refresh Path), `ClientIp`, `dto/SignupRequest`·`SignupResponse`·`LoginRequest`·`OtpVerifyRequest`·`OtpRequiredResponse`·`LoginSuccessResponse`, `ValidSignupPassword`, `SignupPasswordValidator`, `MemberPublicEndpoints`, Google: `MemberOAuthSecurityConfig`, `MemberOAuthProperties`, `OAuthCookieAuthorizationRequestRepository`, `GoogleLoginSuccessHandler`, `GoogleLoginFailureHandler`, `OAuthRateLimitFilter`, `OAuthRedirects` | 가입·로그인·OTP·Refresh·로그아웃 API. IP 제한은 가입·로그인·OTP·Refresh에서 서비스보다 먼저 건다(로그아웃은 IP 제한 없음, MB-D022). 쿠키 발급·삭제는 `AuthCookieWriter` 한 곳(HttpOnly·Secure·Strict·Domain 없음, Max-Age = 만료까지 남은 초 올림). 공개 경로(Access 인증 없이 호출, 모두 CSRF 필요): signup·login·otp/verify·otp/resend·refresh·logout |
 
 - 비밀번호 해시 포맷: `pbkdf2-sha256$v1$nfc$i=<반복 횟수>$k=<키 ID>$<Salt Base64>$<해시 Base64>`. Salt 16바이트(SecureRandom), PBKDF2 출력 256비트, 최종 HMAC-SHA256(pepper) 256비트, Base64는 패딩 없음. 검증은 `MessageDigest.isEqual`(일정 시간). 포맷 오류·키 ID 불일치는 불일치로 처리한다.
-- 비밀번호 정책: NFC 뒤 code point 15~64자. 문맥 단어 판정은 "소문자 → 글자·숫자만 → 끝 숫자 제거"한 핵심어가 username·서비스 이름(`yhslivestreaming`·`yhslive`·`livestreaming`·`yhs`)의 핵심어와 같으면(뒤집은 경우 포함) 거부한다. 끝 숫자는 code point 단위로 뗀다. 또 글자·숫자만 남긴 값(끝 숫자를 떼기 전)이 username과 같거나 뒤집어 같으면 거부한다(숫자·밑줄만인 username 대비). 대소문자는 구분하지 않는다.
+- 비밀번호 정책([MB-D026](decisions.md#1-확정-결정)): NFC 뒤 code point 10~30자(가입 검증기에서만 검사하고 로그인은 길이를 보지 않아 이전 15~64자 비밀번호도 로그인 가능). 문맥 단어 판정은 "소문자 → 글자·숫자만 → 끝 숫자 제거"한 핵심어가 username·서비스 이름(`yhslivestreaming`·`yhslive`·`livestreaming`·`yhs`)의 핵심어와 같으면(뒤집은 경우 포함) 거부한다. 끝 숫자는 code point 단위로 뗀다. 또 글자·숫자만 남긴 값(끝 숫자를 떼기 전)이 username과 같거나 뒤집어 같으면 거부한다(숫자·밑줄만인 username 대비). 대소문자는 구분하지 않는다.
 - 설정: `member.password.pepper-key`·`pepper-key-id`(환경변수 `MEMBER_PASSWORD_PEPPER_KEY`·`_KEY_ID`, 기본값 없음), `iterations`(기본 600,000), `member.password.hibp.base-url`·`connect-timeout`·`read-timeout`(기본값은 `HibpProperties`, 정책 수치는 MB-D010). 키가 없거나 Base64가 아니거나 256비트가 아니면 기동에 실패한다.
 - 입력 정규화: username은 ASCII(`[A-Za-z0-9_]`)일 때만 소문자로 바꾼다(비ASCII가 소문자 변환으로 ASCII가 되는 우회 방지). 닉네임은 앞뒤 공백을 떼고 code point 2~20자, Unicode Cc·Cf(제어·서식 문자) 금지. 이메일은 앞뒤 공백 제거·소문자.
 - 로그: `logging.level.org.hibernate.orm.jdbc.error: OFF`(app `application.yml`). Hibernate 7이 SQL 오류 상세(`Key (email)=(...)`)를 남기는 카테고리다. 예외는 그대로 전파된다.
@@ -94,7 +94,7 @@ username·IP는 SHA-256 hex로 키에 쓴다. 원문이 키 목록에 남지 않
 | `auth:otp:member:{id}:fail:24h` | 카운터 | OTP 검증 실패 합산 | 첫 증가부터 24시간 |
 | `auth:login:fail:{sha256(username)}` | 카운터 | 연속 실패 | 마지막 실패 + 24시간 |
 | `auth:login:block:{sha256(username)}` | STRING | 차단 | 15분(연장 없음) |
-| `ratelimit:{signup\|login\|otp\|refresh\|oauth-start}:{sha256(ip)}` | 카운터 | IP 요청 수(Google 콜백은 login) | 첫 요청부터 1시간·10분·10분·10분·10분 |
+| `ratelimit:{signup\|login\|otp\|refresh\|oauth-start}:{sha256(ip)}` | 카운터 | IP 요청 수(Google 콜백은 login) | 첫 요청부터 10분(가입 20회, MB-D027)·10분·10분·10분·10분 |
 
 | Lua(`src/main/resources/redis/member`) | 원자 처리 범위 |
 | --- | --- |
