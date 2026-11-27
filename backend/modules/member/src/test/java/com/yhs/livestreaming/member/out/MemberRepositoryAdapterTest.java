@@ -46,8 +46,8 @@ class MemberRepositoryAdapterTest {
         assertThat(saved.getId()).isPositive();
         assertThat(saved.getCreatedAt()).isNotNull();
         assertThat(saved.getUpdatedAt()).isNotNull();
-        assertThat(repository.existsByUsername("tester01")).isTrue();
-        assertThat(repository.existsLocalEmail("tester@example.com")).isTrue();
+        assertThat(repository.isUsernameTaken("tester01", java.time.Instant.now().minus(java.time.Duration.ofHours(24)))).isTrue();
+        assertThat(repository.isLocalEmailTaken("tester@example.com", java.time.Instant.now().minus(java.time.Duration.ofHours(24)))).isTrue();
     }
 
     @Test
@@ -92,7 +92,7 @@ class MemberRepositoryAdapterTest {
 
         assertThat(jdbc.queryForObject("SELECT count(*) FROM members WHERE email = 'shared@example.com'", Long.class))
                 .isEqualTo(2L);
-        assertThat(repository.existsLocalEmail("shared@example.com")).isTrue();
+        assertThat(repository.isLocalEmailTaken("shared@example.com", java.time.Instant.now().minus(java.time.Duration.ofHours(24)))).isTrue();
     }
 
     @Test

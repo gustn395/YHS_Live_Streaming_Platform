@@ -123,7 +123,7 @@ backend/
 
 각 도메인 모듈에는 `modules/<domain>/build.gradle.kts`와 기본 패키지 `com.yhs.livestreaming.<domain>`(`package-info.java`)만 있다. 의존성과 계층 패키지는 구현할 때 추가한다. `app`은 global과 7개 도메인 모듈을 모두 `implementation(project(...))`로 조립하고, 모듈 jar는 WAR의 `WEB-INF/lib/yhs-live-streaming-<module>-<version>.jar`로 들어간다.
 
-공통 기반 `modules/global/`(Issue #8, [G-D001](../docs/policy.md#3-공통-결정-이력))은 공통 예외·오류 응답, 보안 기본 체인, 인증 계약, OpenAPI 공통 설정을 둔다. global은 업무 규칙이 없어 계층 패키지 대신 기능별 패키지(`error`·`security`·`auth`·`openapi`)를 쓴다. 다른 모듈이 쓰는 공개 API는 [docs/global/module.md](../docs/global/module.md) 3장이다.
+공통 기반 `modules/global/`(Issue #8, [G-D001](../docs/policy.md#3-공통-결정-이력))은 공통 예외·오류 응답, 보안 기본 체인, 인증 계약, OpenAPI 공통 설정을 둔다. global은 업무 규칙이 없어 계층 패키지 대신 기능별 패키지(`error`·`security`·`auth`·`openapi`·`persistence`·`time`·`scheduling`)를 쓴다. 다른 모듈이 쓰는 공개 API는 [docs/global/module.md](../docs/global/module.md) 3장이다.
 
 모듈 안에서 계층을 패키지로 나눈다.
 

@@ -103,5 +103,15 @@
 | 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#27 Phase 5 S6 재리뷰 반영 뒤 S5: 재시도 401 테스트, GET CSRF 없음 단언, Spec 주석) | 성공(exit 0). member 283, app 152 통과 | |
 | 2026-11-27 | `.\gradlew.bat :app:build` (#27 Phase 5 Commit 직전) | 성공(exit 0). WAR 2개, `:app:test` UP-TO-DATE(직전 --rerun 통과) | S10 0건, S7 미실행(사용자 Q1=a, PASS 아님) |
 | 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#27 Phase 5 S10 뒤 최종 S5) | 성공(exit 0). member 283, app 152 통과 | S10 0건, 코드 변경 없음 |
+| 2026-11-27 | `.\gradlew.bat :modules:global:compileTestJava :modules:member:compileTestJava --continue` (#30 테스트 작성 후, 구현 전 RED 1) | 실패(의도). 컴파일 오류: `GlobalSchedulingConfig`·`app.cleanup`·새 포트 메서드 없음 | |
+| 2026-11-27 | `.\gradlew.bat :modules:global:test --tests "*GlobalSchedulingConfigTest" :modules:member:test --tests "*PendingMemberCleanupServiceTest" --tests "*MemberCleanupPropertiesTest" --tests "*PendingMemberCleanupSchedulerTest" --tests "*SignupServiceTest" --tests "*ExpiredPendingCleanupPersistenceTest" --tests "*MemberRepositoryAdapterTest" :app:test --tests "*PendingCleanupIntegrationTest" --continue` (#30 껍데기 뒤 RED 2) | 실패(의도). global 1/1, member 44건 중 26, app 5/5 실패(기능 없음) | |
+| 2026-11-27 | `.\gradlew.bat :modules:global:test :modules:member:test :app:test --continue` (#30 구현 후 1차) | 실패. member 310건 중 1(`batchAndGoogleRecreationLeaveNoOrphansOrDuplicates`) | S4: 배치가 대상을 고른 뒤 Google 재생성이 같은 만료 회원을 먼저 지우고 커밋 → 배치의 삭제 수가 대상보다 작아 정상 경합을 충돌로 오판(데이터 손상 없음). 판정을 "연결 행을 지운 대상 회원이 남아 있으면 롤백"으로 고침 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*ExpiredPendingCleanupPersistenceTest" --rerun` 3회 (S4 수정 뒤) | 성공(exit 0) 3회 | 테스트마다 경합 5회 반복 |
+| 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (#30 S5) | 성공(exit 0). global 55, member 310, app 157 통과 | |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*PendingMemberCleanupServiceTest"` (#30 S6 지적 회귀 테스트, 수정 전 RED) | 실패(의도). 6건 중 2(부분 실패 요약이 WARN이 아님, 커서 정체 시 무한 반복 방지 없음) | |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*PendingMemberCleanupServiceTest" --tests "*PendingMemberCleanupSchedulerTest" --tests "*ExpiredPendingCleanupPersistenceTest"` (S6 반영 뒤) | 성공(exit 0) | 추가: 실제 DB 여러 배치 정리, GOOGLE 롤백 분기(대역 저장소로 회원 삭제 0행), 경계값 활성화 경합. 스케줄러는 검증된 interval로 등록 |
+| 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (#30 S6 반영 뒤 S5) | 성공(exit 0). global 55, member 313, app 157 통과 | |
+| 2026-11-28 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (#30 S10·S7 뒤 최종 S5) | 성공(exit 0). global 55, member 313, app 157 통과(실패·오류·건너뜀 0) | |
+| 2026-11-28 | `.\gradlew.bat :app:build` (#30 Commit 직전) | 성공(exit 0) | |
 
 - 미실행: 로컬 전체 `./gradlew clean build`(빌드 정책상 실행하지 않음).

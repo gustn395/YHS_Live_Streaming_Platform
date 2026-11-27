@@ -30,6 +30,7 @@
 - 로그인 실패·회원 단위 OTP·IP 기준 요청 수를 제한하고(429), Redis를 쓸 수 없으면 인증 관련 요청을 503으로 거부한다([MB-D017](member/decisions.md#1-확정-결정)~[MB-D019](member/decisions.md#1-확정-결정)).
 - Google 로그인은 OIDC 인증을 1차 인증으로만 쓰고 LOCAL과 같이 이메일 OTP를 거친다. 처음 로그인하면 PENDING GOOGLE 회원으로 자동 가입하며 LOCAL 계정과 병합하지 않는다([MB-D023](member/decisions.md#1-확정-결정)~[MB-D025](member/decisions.md#1-확정-결정)).
 - 로그인한 회원은 자기 정보를 조회하고 닉네임만 바꿀 수 있다. 요청마다 계정 상태를 다시 확인해 정지·없는 회원의 세션을 폐기한다. 다른 모듈은 member의 공개 인터페이스로만 회원을 조회하고 이메일·username은 받지 않는다([MB-D028](member/decisions.md#1-확정-결정), [MB-D029](member/decisions.md#1-확정-결정)).
+- 만료 PENDING 회원은 1시간마다 배치로 정리하고, 그 회원이 쥔 username·이메일로 LOCAL 가입하면 그 자리에서 회수한다. 반복 가입은 IP 가입 제한과 24시간 만료로 대응한다([MB-D030](member/decisions.md#1-확정-결정), [MB-D031](member/decisions.md#1-확정-결정)).
 
 ## 3. 공통 결정 이력
 
@@ -50,6 +51,7 @@
 | G-D013 | Spring Boot 기본 계정(인메모리 사용자와 기동 시 생성 비밀번호)을 쓰지 않는다(`UserDetailsServiceAutoConfiguration` 제외). 인증은 global 보안 체인과 member 모듈이 맡는다. HTTP Basic·폼 로그인 같은 기본 인증 방식은 켜지 않는다. | 기본 계정은 쓰는 곳이 없는데 생성 비밀번호가 로그에 남고, 인증 경로가 하나 더 생긴다. | Member 9차 Q2(Issue #8 S6 리뷰), 2026-11-26 |
 | G-D014 | CSRF는 SPA 이중 제출 방식으로 막는다. Spring Security 7의 `csrf.spa()`는 쓰지 않고, [Spring Security 6.5 공식 문서](https://docs.spring.io/spring-security/reference/6.5/servlet/exploits/csrf.html)의 구성(`CookieCsrfTokenRepository.withHttpOnlyFalse()` + 문서 기반 `SpaCsrfTokenRequestHandler`, BREACH 대응)을 적용한다. 토큰은 `XSRF-TOKEN` 쿠키(HttpOnly 아님, Secure, SameSite=Strict, Path=/, Domain 미지정)와 `X-XSRF-TOKEN` 헤더로 주고받는다. 로그인·회원가입·OTP 등 공개 상태 변경 API도 보호한다. 인증 전 초기 토큰은 공개 `GET /api/v1/auth/csrf`(204, 본문 없음, `Cache-Control: no-store`)로 받고, 지연 로딩된 토큰을 실제로 로드해 쿠키를 발급한다. OTP 최종 인증에 성공하면 CSRF 토큰을 명시적으로 갱신해 새 쿠키를 준다(비밀번호 1차 인증은 최종 로그인과 구분). 자체 로그인 API에서 Spring Security 인증 성공 처리가 자동으로 실행된다고 가정하지 않는다. 로그아웃 관련 CSRF 처리는 BE-04에서 한다. Frontend 반영(FE-D014·FE-U04)은 Frontend 협의 안건이다. G-U02를 닫고, G-D005의 활성화 조건을 채운다. | 쿠키 인증을 도입하면 CSRF 보호가 필요하다(G-D005). SPA와 API가 같은 출처(FE-D002)이고 stateless 체인(G-D004)과 맞는다. 비즈니스 코드는 Boot 3.5 / Security 6.x 호환 API를 우선한다(루트 AGENTS.md). | BE-03 1라운드 Q3(구현 방식 수정)·2라운드 Q1·3라운드 Q4, Issue #13, 2026-11-26 |
 | G-D015 | 모듈 경계는 ArchUnit 테스트(app 모듈 테스트, 테스트 의존성만)로 자동 검사한다. 규칙: 다른 모듈은 member 중 `com.yhs.livestreaming.member.app.api` 패키지만 참조한다. global은 도메인 모듈을 참조하지 않는다(G-D001). 다른 도메인 모듈의 공개 패키지가 생기면 같은 테스트에 규칙을 더한다. 도입 버전은 [README 6장](../backend/README.md#6-의존성-도입-계획-q3)을 따른다. | [README 5장](../backend/README.md#5-모듈과-패키지-규칙)의 "다른 도메인은 `app` 공개 API로만" 규칙을 같은 Gradle 모듈 안의 Java 접근 제어만으로는 강제할 수 없다. 빌드 구조를 바꾸지 않고 CI에서 막는다. | BE-07 1라운드 Q7, Issue #27, 2026-11-27 |
+| G-D016 | 이 프로젝트(개인 사이드 프로젝트)는 Spring Boot 단일 인스턴스 배포를 전제로 하고 다중 인스턴스 운영을 전제로 설계하지 않는다. 스케줄 작업의 중복 실행을 막는 분산 잠금(PostgreSQL advisory lock, ShedLock 등)은 두지 않고 다중 서버 중복 실행 전용 테스트도 두지 않는다. 대신 스케줄 작업은 조건부·멱등으로 만들고, 단일 인스턴스 안에서 동시에 일어나는 요청·작업 사이의 DB 트랜잭션 정합성은 검증한다. 스케줄링 활성화(`@EnableScheduling`)는 global 공통 설정에 두고, 각 작업의 자동 실행 여부는 그 모듈의 설정값으로 끈다. 스케일아웃이 실제로 필요해지면 중복 실행 방지와 분산 잠금을 다시 검토한다. | 지금 필요하지 않은 확장성을 위해 구현 복잡도와 테스트 범위를 늘리지 않는다. 멱등 작업은 중복 실행돼도 결과가 같다. | BE-08 1라운드 Q2·Q3(사용자 범위 명시), Issue #30, 2026-11-27 |
 
 ## 4. 공통 미결
 

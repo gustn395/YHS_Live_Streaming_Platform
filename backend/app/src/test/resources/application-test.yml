@@ -13,6 +13,9 @@ member:
     hmac-key-id: test-otp-1
     mail:
       from: no-reply@example.com
+  cleanup:
+    # 테스트에서는 만료 PENDING 정리 배치를 자동으로 돌리지 않는다(MB-D030). 서비스는 테스트가 직접 호출한다.
+    enabled: false
   oauth:
     # 테스트는 실제 Google을 부르지 않는다(MB-D023). 기본은 닿지 않는 주소이고, Google 통합 테스트만 가짜 OIDC 공급자로 바꾼다.
     public-base-url: https://app.test

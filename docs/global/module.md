@@ -16,6 +16,7 @@
 | `openapi` | 공통 `OpenAPI`(보안 스킴 `accessTokenCookie`·`csrfHeader`), `ProblemDetail` 오류 스키마(`OpenApiCustomizer`), 문서가 켜졌을 때만 문서 경로 공개 | G-D008, G-D012, MB-D013, G-D014 |
 | `persistence` | `GlobalJpaConfig`(`@EnableJpaAuditing`), `BaseTimeEntity`(`created_at`·`updated_at` TIMESTAMPTZ를 감사 기능으로 채움) | G-D010 |
 | `time` | `TimeConfig`(`Clock`, 다른 Bean이 없을 때 UTC 시스템 시계) | — |
+| `scheduling` | `GlobalSchedulingConfig`(`@EnableScheduling`, 앱 전체 한 번. 각 작업의 자동 실행 여부는 모듈 설정) | G-D016 |
 
 - OpenAPI 보안 스킴: BE-01에서는 정의하지 않았고 BE-03(MB-W05)에서 cookie 방식 `accessTokenCookie`(`__Host-yhs_at`, [MB-D013](../member/decisions.md#1-확정-결정))와 CSRF 헤더 `csrfHeader`(`X-XSRF-TOKEN`)를 정의했다. Bearer 스킴은 넣지 않는다(Issue #8 범위 변경, 2026-11-26 사용자 결정).
 

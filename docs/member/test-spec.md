@@ -68,14 +68,24 @@
 | MB-T058 | 회원 조회 공개 인터페이스 | 단건(없으면 빈 결과), 일괄(없는 ID 생략·중복 한 번·100개 허용·101개 `IllegalArgumentException`·빈 목록은 저장소 호출 없음), 활성 여부(ACTIVE만 참, PENDING·DISABLED·없음 거짓), 저장소 일괄 조회는 있는 회원만 | 원문 미대조 | MB-D029 | `MemberQueryServiceTest`, `MemberRepositoryAdapterTest` |
 | MB-T059 | 공개 DTO 필드 | `MemberSummary`의 필드는 memberId·nickname·role·accountStatus뿐(email·username 없음), 모든 내부 계정 상태가 같은 이름의 공개 상태로 옮겨짐 | 원문 미대조 | MB-D029 | `MemberQueryServiceTest` |
 | MB-T060 | 내 정보 Swagger Spec | `/v3/api-docs`의 GET·PATCH `/api/v1/members/me`: 태그 Member, 보안 요구사항 객체 하나(GET은 Access 쿠키, PATCH는 Access 쿠키와 CSRF 헤더를 같은 객체에), 200·401·403·503(PATCH는 400도, 오류는 ProblemDetail 참조), 숨긴 파라미터 없음, 응답·요청 스키마 필드(비밀번호 해시·username 수정 필드 없음) | 원문 미대조 | MB-D028, G-D008 | `MemberOpenApiIntegrationTest` |
+| MB-T061 | 정리 배치 반복·기준 시각 | 실행 시작 때 기준 시각(지금 - 24시간)을 한 번 정함, 고른 대상 수가 배치 크기와 같으면 마지막 ID를 커서로 계속(지운 수가 작거나 0이어도), 덜 차면 끝, 커서가 나아가지 않으면 멈춤(무한 반복 방지), LOCAL·GOOGLE 따로, 실제 DB에서 배치 크기 2로 LOCAL 5·GOOGLE 3을 모두 정리 | 원문 미대조 | MB-D030 | `PendingMemberCleanupServiceTest`, `ExpiredPendingCleanupPersistenceTest` |
+| MB-T062 | 정리 실패·기록 | 배치 실패 시 그 유형만 멈추고 이전에 커밋된 수를 결과에 남김, 다른 유형은 계속, completed=false이고 요약(LOCAL·GOOGLE 건수·소요 시간)을 WARN 한 줄로 남김. 로그는 건수·소요 시간·예외 클래스 이름만(회원 ID·이메일·sub·예외 메시지 없음) | 원문 미대조 | MB-D030 | `PendingMemberCleanupServiceTest` |
+| MB-T063 | 정리 설정·스케줄러 | 기본값 켜짐·1시간·500, 값 설정 가능, 간격 0 이하·배치 0·10,001이면 기동 실패. `enabled=false`면 스케줄러 빈 없음, 검증된 interval로 고정 지연 작업 하나(첫 지연 = interval) 등록, 실패를 삼켜 다음 주기 실행 | 원문 미대조 | MB-D030, G-D016 | `MemberCleanupPropertiesTest`, `PendingMemberCleanupSchedulerTest` |
+| MB-T064 | 가입 서비스의 회수 흐름 | 사전 검사·회수 저장이 같은 기준 시각(지금 - 24시간)을 씀, 유출·확인 불가 비밀번호면 회수·저장 없음 | 원문 미대조 | MB-D030, MB-D010 | `SignupServiceTest` |
+| MB-T065 | LOCAL 정리 배치(DB) | LOCAL·PENDING·만료만 삭제(유효 PENDING·ACTIVE·DISABLED·GOOGLE 유지), ID 커서·LIMIT, 정확히 24시간 지난 순간부터 만료 | 원문 미대조 | MB-D030, MB-D003 | `ExpiredPendingCleanupPersistenceTest` |
+| MB-T066 | GOOGLE 정리 배치(DB) | 연결 행 → 회원 행 삭제, 연결 행 둘인 회원·연결 행 없는 회원도 회원 ID 기준으로 정리, 유효·ACTIVE GOOGLE과 LOCAL은 유지, 대상 회원이 남으면(회원 삭제 0행) 배치 롤백으로 연결 행도 남음 | 원문 미대조 | MB-D030, MB-D025 | `ExpiredPendingCleanupPersistenceTest` |
+| MB-T067 | LOCAL 가입 시 즉시 회수(DB) | 만료 PENDING 보유자는 사전 검사에서 세지 않음(유효·ACTIVE는 셈, GOOGLE 같은 이메일 허용). username만·이메일만·같은 회원 둘 다·서로 다른 두 회원과 충돌 시 회수 후 저장, 회수 불가 회원과 함께 충돌하면 409이고 회수도 롤백, 다른 DB 오류는 중복 오류로 숨기지 않고 롤백, GOOGLE 회원은 회수하지 않음 | 원문 미대조 | MB-D030, MB-D008 | `ExpiredPendingCleanupPersistenceTest`, `MemberRepositoryAdapterTest` |
+| MB-T068 | 정리 동시성(DB, 장벽으로 동시 출발·5회 반복) | 배치↔LOCAL 회수: 예외 없음·옛 회원 삭제·새 회원 1명. 배치↔GOOGLE 재생성: 예외 없음·옛 회원 삭제·연결 행 수 = 재생성 성공 여부·연결 행 없는 GOOGLE 회원 없음. 배치↔OTP 활성화(LOCAL·GOOGLE, 같은 기준 시각의 경계 양쪽 회원): 정확히 기준 시각 회원은 삭제·활성화 0행, 1ms 뒤 회원은 ACTIVE로 남고 연결 행 유지. 동시 가입 회수: 한 건만 성공·나머지 409·회원 1명 | 원문 미대조 | MB-D030, MB-D025, G-D016 | `ExpiredPendingCleanupPersistenceTest` |
+| MB-T069 | 정리·회수 통합 | 테스트 프로필에서 스케줄러 빈 없음·서비스 직접 호출 가능, 만료 PENDING이 쥔 username·이메일로 가입 201, 유효 PENDING이면 409, 만료 회원 로그인 401 뒤 정리하면 같은 값으로 재가입, 정리 배치가 만료 LOCAL·GOOGLE만 지움 | 원문 미대조 | MB-D030 | `PendingCleanupIntegrationTest` |
 
 ## 2. 집계
 
-- 요구사항 60건(MB-T001~MB-T060, MB-T009 폐지). JUnit 테스트: member 283건(단위 178, 영속성 26, Redis 76, SMTP 3), app 112건(`MemberProfileApiIntegrationTest` 12, `MemberOpenApiIntegrationTest` 1, `SignupApiIntegrationTest` 14, `SignupOpenApiIntegrationTest` 1, `LoginApiIntegrationTest` 20, `RedisUnavailableIntegrationTest` 4, `AuthStoreFailureIntegrationTest` 8, `AuthOpenApiIntegrationTest` 3, `RefreshLogoutApiIntegrationTest` 21, `GoogleOAuthLoginIntegrationTest` 28). 실행 결과는 [regression-log.md](regression-log.md).
+- 요구사항 69건(MB-T001~MB-T069, MB-T009 폐지). JUnit 테스트: member 313건(단위 192, 영속성 42, Redis 76, SMTP 3), app 117건(`PendingCleanupIntegrationTest` 5, `MemberProfileApiIntegrationTest` 12, `MemberOpenApiIntegrationTest` 1, `SignupApiIntegrationTest` 14, `SignupOpenApiIntegrationTest` 1, `LoginApiIntegrationTest` 20, `RedisUnavailableIntegrationTest` 4, `AuthStoreFailureIntegrationTest` 8, `AuthOpenApiIntegrationTest` 3, `RefreshLogoutApiIntegrationTest` 21, `GoogleOAuthLoginIntegrationTest` 28). 실행 결과는 [regression-log.md](regression-log.md).
 - "명세" 열 "원문 미대조": BE-03 정책은 기존 Member 명세(사용자 재확인)에서 왔지만 원문이 저장소에 없어 MEM 번호(MEM-05~MEM-08 등)와 대조하지 못했다.
 - 수동 확인(자동 테스트 아님, 미실행): 개발 브라우저(http://localhost)에서 `__Host-`·Secure 쿠키가 저장·전송되는지(MB-D013).
 - "명세" 열 "원문 미대조"는 BE-04(MB-T035~MB-T041)도 같다: 사용자 결정(MB-D020~D022)에서 왔다.
 - "명세" 열 "원문 미대조"는 BE-05(MB-T044~MB-T053)도 같다: 사용자 결정(MB-D023~D025)에서 왔다.
 - MB-T054와 MB-T006·MB-T028의 BE-06 변경분(Issue #24)은 사용자 결정(MB-D026·D027)에서 왔다.
 - MB-T055~MB-T060(Issue #27)은 사용자 결정(MB-D028·D029)에서 왔다. 세션 저장소 장애 503의 공통 경로는 global GL 테스트가 확인한다.
+- MB-T061~MB-T069(Issue #30)는 사용자 결정(MB-D030·D031, G-D016)에서 왔다. 다중 인스턴스 중복 실행 테스트는 범위 밖이다(G-D016). GOOGLE 배치의 "대상 회원이 남으면 롤백" 분기는 회원 행 삭제만 0행으로 바꾼 대역 저장소로 결정적으로 재현한다.
 - 수동 확인(미실행): 실제 Google 계정으로 로그인, 실제 브라우저에서 Google 복귀 때 `__Host-yhs_oauth`(Lax) 전송. 자동 테스트는 가짜 OIDC 공급자를 쓴다.

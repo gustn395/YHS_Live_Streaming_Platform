@@ -12,9 +12,20 @@ import java.util.Optional;
  */
 public interface MemberRepository {
 
-    boolean existsByUsername(String username);
+    /**
+     * 가입 사전 중복 검사(MB-D008, MB-D030): 이 username을 쥔 회원이 있으면 참이다. 단 LOCAL·PENDING이고 가입 시각이
+     * {@code expiredAtOrBefore} 이하(만료)인 회원은 회수 대상이라 세지 않는다.
+     */
+    boolean isUsernameTaken(String username, Instant expiredAtOrBefore);
 
-    boolean existsLocalEmail(String email);
+    /** 가입 사전 중복 검사: LOCAL 회원 이메일 기준, 만료 LOCAL PENDING은 세지 않는다(MB-D030). */
+    boolean isLocalEmailTaken(String email, Instant expiredAtOrBefore);
+
+    /**
+     * LOCAL 가입 시 즉시 회수(MB-D030): 한 트랜잭션에서 이 회원의 username·이메일을 쥔 만료 LOCAL PENDING 회원을 조건부로
+     * 지우고 새 회원을 저장한다. 저장이 실패하면 삭제도 롤백되고, UNIQUE 위반은 {@link #save}와 같은 409다.
+     */
+    Member saveReclaimingExpired(Member member, Instant expiredAtOrBefore);
 
     Member save(Member member);
 

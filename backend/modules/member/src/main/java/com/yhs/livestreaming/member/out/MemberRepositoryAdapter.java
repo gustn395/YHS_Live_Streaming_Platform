@@ -16,6 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * {@link MemberRepository}의 JPA 구현. 저장은 {@code saveAndFlush}로 즉시 INSERT해 UNIQUE 위반을 이 메서드 안에서 받는다.
@@ -34,19 +36,38 @@ public class MemberRepositoryAdapter implements MemberRepository {
     private static final Logger log = LoggerFactory.getLogger(MemberRepositoryAdapter.class);
 
     private final MemberJpaRepository jpa;
+    private final TransactionTemplate tx;
 
-    MemberRepositoryAdapter(MemberJpaRepository jpa) {
+    MemberRepositoryAdapter(MemberJpaRepository jpa, PlatformTransactionManager transactionManager) {
         this.jpa = jpa;
+        this.tx = new TransactionTemplate(transactionManager);
     }
 
     @Override
-    public boolean existsByUsername(String username) {
-        return jpa.existsByUsername(username);
+    public boolean isUsernameTaken(String username, Instant expiredAtOrBefore) {
+        return jpa.existsUsernameHolder(username, expiredAtOrBefore, AccountType.LOCAL, AccountStatus.PENDING);
     }
 
     @Override
-    public boolean existsLocalEmail(String email) {
-        return jpa.existsByEmailAndAccountType(email, AccountType.LOCAL);
+    public boolean isLocalEmailTaken(String email, Instant expiredAtOrBefore) {
+        return jpa.existsLocalEmailHolder(email, expiredAtOrBefore, AccountType.LOCAL, AccountStatus.PENDING);
+    }
+
+    /**
+     * 만료 LOCAL PENDING 회수와 저장을 한 트랜잭션에서 한다(MB-D030). 삭제는 LOCAL·PENDING·만료 조건을 문장 안에서 다시 확인한다.
+     * 저장이 실패하면 트랜잭션 전체가 롤백되어 회수한 회원도 남고, 예외 변환은 롤백이 끝난 뒤 {@link #save}와 같은 규칙으로 한다.
+     */
+    @Override
+    public Member saveReclaimingExpired(Member member, Instant expiredAtOrBefore) {
+        try {
+            return tx.execute(status -> {
+                jpa.deleteExpiredLocalHolders(member.getUsername(), member.getEmail(), expiredAtOrBefore,
+                        AccountType.LOCAL, AccountStatus.PENDING);
+                return jpa.saveAndFlush(member);
+            });
+        } catch (DataIntegrityViolationException ex) {
+            throw translated(ex);
+        }
     }
 
     @Override
@@ -54,19 +75,24 @@ public class MemberRepositoryAdapter implements MemberRepository {
         try {
             return jpa.saveAndFlush(member);
         } catch (DataIntegrityViolationException ex) {
-            Optional<ConstraintViolationException> violation = constraintViolation(ex);
-            String constraint = violation.map(ConstraintViolationException::getConstraintName).orElse("");
-            if (USERNAME_UNIQUE.equalsIgnoreCase(constraint)) {
-                throw duplicate(MemberErrorCode.USERNAME_DUPLICATE);
-            }
-            if (LOCAL_EMAIL_UNIQUE.equalsIgnoreCase(constraint)) {
-                throw duplicate(MemberErrorCode.EMAIL_DUPLICATE);
-            }
-            String sqlState = violation.map(ConstraintViolationException::getSQLState).orElse("unknown");
-            log.warn("회원 저장 중 DB 제약 위반: constraint={}, sqlState={}", constraint.isEmpty() ? "unknown" : constraint,
-                    sqlState);
-            throw new IllegalStateException("회원 저장 중 DB 제약 위반(" + (constraint.isEmpty() ? "unknown" : constraint) + ")");
+            throw translated(ex);
         }
+    }
+
+    /** username·LOCAL 이메일 UNIQUE 위반만 409로 바꾸고, 그 밖의 위반은 상세 없는 서버 오류로 바꾼다. */
+    private static RuntimeException translated(DataIntegrityViolationException ex) {
+        Optional<ConstraintViolationException> violation = constraintViolation(ex);
+        String constraint = violation.map(ConstraintViolationException::getConstraintName).orElse("");
+        if (USERNAME_UNIQUE.equalsIgnoreCase(constraint)) {
+            return duplicate(MemberErrorCode.USERNAME_DUPLICATE);
+        }
+        if (LOCAL_EMAIL_UNIQUE.equalsIgnoreCase(constraint)) {
+            return duplicate(MemberErrorCode.EMAIL_DUPLICATE);
+        }
+        String sqlState = violation.map(ConstraintViolationException::getSQLState).orElse("unknown");
+        log.warn("회원 저장 중 DB 제약 위반: constraint={}, sqlState={}", constraint.isEmpty() ? "unknown" : constraint,
+                sqlState);
+        return new IllegalStateException("회원 저장 중 DB 제약 위반(" + (constraint.isEmpty() ? "unknown" : constraint) + ")");
     }
 
     @Override
