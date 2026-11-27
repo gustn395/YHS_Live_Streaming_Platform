@@ -15,9 +15,15 @@ export interface LoginPrincipal {
   accessTokenExpiresAt: number;
 }
 
-/** ISO 시각 문자열만 받는다. 숫자·빈 값·해석 불가는 거부한다. */
+/**
+ * Backend Instant의 JSON 형식(ISO-8601 UTC, `Z`, 소수 초 0~9자리). Date.parse는 RFC 1123·날짜만·시간대 없는 지역 시각도
+ * 받아들이므로 먼저 이 형식인지 확인한다.
+ */
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
+
+/** Backend Instant 형식의 시각 문자열만 받는다. 숫자·빈 값·다른 형식·해석 불가는 거부한다. */
 function parseInstant(value: unknown, name: string): number {
-  if (typeof value !== 'string') throw new Error(`${name} 형식 오류`);
+  if (typeof value !== 'string' || !ISO_INSTANT.test(value)) throw new Error(`${name} 형식 오류`);
   const ms = Date.parse(value);
   if (!Number.isFinite(ms)) throw new Error(`${name} 형식 오류`);
   return ms;

@@ -49,6 +49,9 @@ describe('submitLogin 200 계약', () => {
     ['otpExpiresAt 누락', { status: 'OTP_REQUIRED' }, 200],
     ['otpExpiresAt 날짜 아님', { status: 'OTP_REQUIRED', otpExpiresAt: 'soon' }, 200],
     ['otpExpiresAt 숫자', { status: 'OTP_REQUIRED', otpExpiresAt: 1764237900000 }, 200],
+    // 재발송과 같은 파서(parseOtpRequired)를 쓴다: Backend Instant 형식(ISO-8601 UTC `Z`)만 받는다(FE-T031)
+    ['otpExpiresAt RFC 1123', { status: 'OTP_REQUIRED', otpExpiresAt: 'Fri, 27 Nov 2026 10:05:00 GMT' }, 200],
+    ['otpExpiresAt 시간대 없음', { status: 'OTP_REQUIRED', otpExpiresAt: '2026-11-27T10:05:00' }, 200],
     ['본문 없음', null, 200],
     ['201', { status: 'OTP_REQUIRED', otpExpiresAt: EXPIRES }, 201],
     ['202', { status: 'OTP_REQUIRED', otpExpiresAt: EXPIRES }, 202],

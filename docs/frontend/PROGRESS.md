@@ -17,7 +17,7 @@
 
 Backend 협의 안건이다. 결정 주체는 Backend member 담당이며 FE-04 범위의 진행을 막지 않는다([FE-D034](decisions.md#1-확정-결정)).
 
-- 새로고침 뒤 인증 복원에 필요한 현재 회원 조회 API 유무와 응답 형식 — [FE-U02](decisions.md#2-미결).
+- 새로고침 뒤 인증 복원에 쓸 현재 회원 조회 API — member BE-07(#28)이 `GET /api/v1/members/me`를 제공한다(계약 원본: [member module.md](../member/module.md) 6장). 실제 Auth Adapter 연결은 후속 FE 작업 — [FE-U02](decisions.md#2-미결).
 - 만료 401과 미인증 401의 구분, 로그아웃·Refresh 화면 연동 — [FE-U02](decisions.md#2-미결).
 
 FE-W02의 GitHub Settings 작업이다. 사용자가 하며, 순서·절차는 [fe02-ci-split.md](../testing/fe02-ci-split.md) 5장이 원본이다.

@@ -63,6 +63,33 @@ describe('verifyOtp', () => {
   });
 });
 
+// FE-T031(CodeRabbit 반영): 시각은 Backend Instant 계약(ISO-8601 UTC `Z`)만 받는다. Date.parse가 받아들이는 다른 형식은 거부
+describe('OTP 응답 시각 형식', () => {
+  it.each([
+    ['RFC 1123', 'Fri, 27 Nov 2026 10:05:00 GMT'],
+    ['시간대 없음', '2026-11-27T10:05:00'],
+    ['날짜만', '2026-11-27'],
+    ['오프셋 표기', '2026-11-27T19:05:00+09:00'],
+    ['소수 초 10자리', '2026-11-27T10:05:00.1234567890Z'],
+  ])('%s(%s) → invalid-response', async (_name, value) => {
+    document.cookie = 'XSRF-TOKEN=t1; path=/';
+    capture(RESEND, () => HttpResponse.json({ status: 'OTP_REQUIRED', otpExpiresAt: value }));
+    expect(await failureOf(resendOtp(createApiClient()))).toEqual({ kind: 'invalid-response', status: 200 });
+  });
+
+  it.each(['2026-11-27T10:05:00Z', '2026-11-27T10:05:00.123Z', '2026-11-27T10:05:00.123456789Z'])('%s는 허용', async (value) => {
+    document.cookie = 'XSRF-TOKEN=t1; path=/';
+    capture(RESEND, () => HttpResponse.json({ status: 'OTP_REQUIRED', otpExpiresAt: value }));
+    await expect(resendOtp(createApiClient())).resolves.toEqual({ otpExpiresAt: Date.parse(value) });
+  });
+
+  it('로그인 성공 응답의 accessTokenExpiresAt도 같은 규칙(RFC 1123 거부)', async () => {
+    document.cookie = 'XSRF-TOKEN=t1; path=/';
+    capture(VERIFY, () => HttpResponse.json({ ...SUCCESS, accessTokenExpiresAt: 'Fri, 27 Nov 2026 10:15:00 GMT' }));
+    expect(await failureOf(verifyOtp(createApiClient(), '1234'))).toEqual({ kind: 'invalid-response', status: 200 });
+  });
+});
+
 describe('resendOtp', () => {
   it('본문 없이 보내고 새 OTP 만료 시각을 돌려준다', async () => {
     document.cookie = 'XSRF-TOKEN=t1; path=/';

@@ -392,3 +392,19 @@ S6(Standards·Spec) 지적 12건 중 수용 1·2·4·5·6·8, Q1(로그인·OTP 
 | S4 원인·수정 | 테스트만 수정 | 원인: 라우터 상태가 화면 커밋보다 먼저 바뀌는데 테스트가 바로 `getBy`로 동기 조회. 제품 결함 아님. 같은 패턴 3곳을 기다렸다가 찾도록 바꿈: `router.test.tsx:31`, `LoginPage.test.tsx`(인증 표시), FE-03 테스트 `SignupPage.test.tsx:78`. 이번 LoginPage가 이전 Placeholder보다 무거워 드러난 것으로 추정(이전 코드와 비교 측정은 하지 않음) |
 | S5 재검증 | `npm run lint` / `typecheck` / `npm test` 3회 / `build`, `git diff --check`, 변경 파일 스캔 | 0 / 0 / 522건 통과 3회 / 0, 오류 없음, 보이지 않는 문자·줄 끝 공백·비밀 값 0 |
 | E2E 재실행(사용자 지시) | 위 "E2E 실행"과 같은 절차(새 비밀 값, `down -v` → `up -d --wait` → bootRun → dev → `npm --prefix frontend run e2e`) | **3건 통과**(7.7초, 6.0초, 1.1분, 합계 1.4분). 정리: `down -v` 뒤 컨테이너 0·볼륨 0, 남은 fe04 Vite node 1개 종료, 포트 6개 해제, 비밀 값 파일 삭제 |
+
+### 2026-11-27 FE-04(Issue #26) CodeRabbit 리뷰 반영 — 기준 커밋 2f98e52 + 작업 트리(커밋 전)
+
+인라인 2건을 지금 코드로 확인했고 둘 다 수용했다(S8). 모두 Claude가 실행했다. Backend·Docker는 실행하지 않았다.
+
+| 단계 | 명령 | 결과 |
+| --- | --- | --- |
+| CR-2 RED | `npx vitest run src/features/otp/otpApi.test.ts` | 6건 실패(기대한 이유: RFC 1123·시간대 없음·날짜만·오프셋·소수 초 10자리·로그인 성공 응답 RFC 1123을 받아들임). 정상 ISO 3건(`Z`, 소수 3·9자리)은 처음부터 통과 |
+| CR-2 GREEN | `parseInstant`가 Backend Instant 형식(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$`)을 먼저 확인. `npx vitest run src/features/otp src/features/login src/app` | 119건 통과 |
+| CR-1 재현 | 연결만 받고 응답하지 않는 임시 로컬 서버(127.0.0.1:18999, scratchpad) 대상으로 `timeout 25 npx playwright test` | 25초 안에 끝나지 않아 강제 종료(rc 124) |
+| CR-1 수정 확인 | 점검 `fetch`에 `AbortSignal.timeout(5_000)`, 같은 명령 | 8초 만에 "E2E 환경 미기동: Frontend dev 서버에 연결할 수 없습니다…"로 종료(rc 1). 임시 서버 종료·포트 해제 확인 |
+| 검증(S5) | `npm run lint` / `typecheck` / `npm test` / `build`, `git diff --check` | 0 / 0 / 32파일 531건 통과 / 0, 오류 없음 |
+
+| S6·S10 | Standards·Spec 하위 리뷰, 보안 리뷰 | Spec 0건, S10 후보 0건, Standards 판단 3건: 1 FE-T030·로그인 경로 테스트 누락(수용: 테스트 2건 추가 — 공용 파서라 처음부터 통과, 형식 검사를 뺀 뮤테이션에서 2건 실패·복원 뒤 89건 통과), 2 형식 규칙 중복(수용: module은 FE-T031을 가리킴), 3 결정 ID 없음(Q1=a: [FE-D043](decisions.md#1-확정-결정) 기록, FE-T030·T031 근거 갱신) |
+
+- 미실행: 실제 Backend E2E 재실행(이번 변경은 응답 시각 형식 검사와 E2E 사전 점검 시간 제한이며, 실제 Backend의 Instant 형식은 이전 E2E 3회에서 통과함).

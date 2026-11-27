@@ -59,7 +59,7 @@ CSRF 부착·오류 분류·회원가입 화면·스타일 기반이고, FE-04(#
   `build`(`tsc -b` → `vite build` → `node scripts/checkDist.ts`), `e2e`·`e2e:smoke`(Playwright, 로컬 전용·CI 미실행).
 - 로컬 E2E([FE-D039](decisions.md#1-확정-결정), [FE-D040](decisions.md#1-확정-결정)): `@playwright/test` 1.65.0(devDependency), `playwright.config.ts`
   (Chromium 하나, workers 1, 재시도 0, timeout 30초, webServer 없음, `baseURL`은 `E2E_BASE_URL`, 실패한 테스트만 trace·스크린샷을 OS 임시 폴더
-  `yhs-e2e/test-results`에, 리포터 `list`), `e2e/globalSetup.ts`(Frontend `/`·프록시 경유 `/api/v1/auth/csrf` 204·Mailpit `/api/v1/info` 확인, 아니면 이유를 밝히고 중단),
+  `yhs-e2e/test-results`에, 리포터 `list`), `e2e/globalSetup.ts`(Frontend `/`·프록시 경유 `/api/v1/auth/csrf` 204·Mailpit `/api/v1/info` 확인, 요청마다 5초 제한, 아니면 이유를 밝히고 중단),
   `e2e/support/env.ts`(기본값 없는 `E2E_BASE_URL`·`E2E_MAILPIT_URL`), `accounts.ts`(테스트마다 `/csrf` → `POST /signup`으로 새 계정, 쿠키·헤더 직접 전송),
   `mailpit.ts`(수신자 검색 → 요청 전 ID 목록에 없던 메일 1통만 읽고 `로그인 인증 번호: NNNN` 줄에서 추출, 15초 폴링), `login.spec.ts`(E2E-01~03).
   ESLint는 e2e가 앱 소스(`src`)를 import하지 못하게 막는다. 서버 묶음은 `infrastructure/docker/e2e/compose.yml`(프로젝트 `yhs-e2e`, postgres·redis·mailpit
@@ -106,6 +106,7 @@ CSRF 부착·오류 분류·회원가입 화면·스타일 기반이고, FE-04(#
   `ready=false`면 제출 없음, 언마운트 때 요청 취소), `loginText.ts`(고정 문구), `googleLoginError.ts`(6개 코드 고정 문구·그 밖은 일반 문구).
   의존 방향은 login → otp 한쪽이다(`OtpRequired`·`parseOtpRequired`).
 - OTP(`src/features/otp/`): `otpApi.ts`(`verifyOtp` 문자열 code·200 `LoginSuccessResponse` 검사 → `LoginPrincipal`(memberId·role·accessTokenExpiresAt ms),
+  시각 형식 검사(규칙은 test-spec FE-T031),
   `resendOtp` 본문 없음, `parseOtpRequired` 로그인·재발송 공용, 재발송 간격 `RESEND_INTERVAL_SECONDS` 60초), `OtpForm.tsx`(입력 칸 하나·숫자만 4자리·`maxLength` 없음,
   4자리일 때만 확인, 확인·재발송 배타(`pendingRef`), 남은 시간 분:초와 재발송 대기 초를 `useCountdown`으로 1초마다 갱신, 코드별 처리와 다시 시작 사유 `onRestart`,
   확인 429는 확인 버튼만·재발송 429는 재발송 대기로 막음, `onVerified`가 false면 반영 실패 안내·진행 중 해제([FE-D042](decisions.md#1-확정-결정) (1)),
