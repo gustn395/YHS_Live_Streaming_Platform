@@ -7,7 +7,7 @@ export function PublicHome() {
   return (
     <main>
       <h1>YHS Live Streaming</h1>
-      <Link to="/app">내 화면</Link>
+      <Link to="/app">내 화면</Link> · <Link to="/signup">회원가입</Link>
     </main>
   );
 }
@@ -21,6 +21,9 @@ export function LoginPlaceholder() {
         <p role="status">로그인이 만료되었습니다. 다시 로그인해 주세요.</p>
       )}
       <p>로그인 화면은 준비 중입니다.</p>
+      <p>
+        계정이 없나요? <Link to="/signup">회원가입</Link>
+      </p>
     </main>
   );
 }

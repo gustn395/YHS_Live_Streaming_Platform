@@ -8,6 +8,10 @@ const problem = (code: string) => ({ code, fieldErrors: [] });
 describe('presentApiFailure', () => {
   it.each<[string, ApiFailure, ReturnType<typeof presentApiFailure>]>([
     ['403', { kind: 'http', status: 403, problem: problem('AUTH_ACCESS_DENIED') }, 'forbidden'],
+    // FE-T022: CSRF 403은 권한 없음이 아니라 호출 화면이 처리한다(FE-D021)
+    ['403 CSRF', { kind: 'http', status: 403, problem: problem('AUTH_CSRF_INVALID') }, 'csrf-retry'],
+    ['code 없는 403', { kind: 'http', status: 403, problem: null }, 'forbidden'],
+    ['csrf-unavailable', { kind: 'csrf-unavailable' }, 'common'],
     ['503 세션 저장소', { kind: 'http', status: 503, problem: problem('AUTH_SESSION_STORE_UNAVAILABLE') }, 'retry-later'],
     ['code 없는 503', { kind: 'http', status: 503, problem: null }, 'common'],
     ['500', { kind: 'http', status: 500, problem: problem('COMMON_INTERNAL_ERROR') }, 'common'],

@@ -1,0 +1,111 @@
+/* 회원가입 폼(FE-D027, FE-D028). 색·간격은 src/styles/tokens.css의 CSS 변수만 쓴다. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.label {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.inputRow {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.input:focus-visible,
+.toggle:focus-visible,
+.submit:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.inputInvalid {
+  border-color: var(--color-danger);
+}
+
+.toggle {
+  min-width: 64px;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-brand);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* 눌린 토글: 글자는 그대로 두고 배경·테두리로 상태를 보인다(FE-D032) */
+.togglePressed {
+  border-color: var(--color-brand);
+  background: var(--color-brand);
+  color: var(--color-on-brand);
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  /* 아이디 변환 안내처럼 사용자 입력이 들어가는 긴 연속 문자열도 폭을 넘지 않게 한다(FE-D028) */
+  overflow-wrap: anywhere;
+}
+
+.error {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-danger);
+}
+
+.banner {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  color: var(--color-text);
+}
+
+.bannerError {
+  border: 1px solid var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+.bannerWarning {
+  border: 1px solid var(--color-border);
+  background: var(--color-warning-bg);
+}
+
+.submit {
+  min-height: 44px;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--color-brand);
+  color: var(--color-on-brand);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

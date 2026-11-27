@@ -41,6 +41,18 @@ describe('성공 응답', () => {
 
 // FE-T002: 비동기 parse도 기다린 뒤 형식 오류를 invalid-response로 바꾼다(Bot 리뷰 반영)
 describe('비동기 parse', () => {
+  // CR-6: parse는 응답 상태 코드를 두 번째 인자로 받는다(201만 성공 같은 계약 검사용)
+  it('parse에 응답 상태 코드를 함께 넘긴다', async () => {
+    server.use(http.get('*/api/v1/ping', () => HttpResponse.json({ pong: true }, { status: 202 })));
+    const client = createApiClient();
+    const seen: unknown[] = [];
+    await client.request({ method: 'get', path: '/v1/ping', authScope: 'none' }, (data, status) => {
+      seen.push(status);
+      return data;
+    });
+    expect(seen).toEqual([202]);
+  });
+
   it('비동기 parse 결과를 기다려 돌려준다', async () => {
     server.use(http.get('*/api/v1/ping', () => HttpResponse.json({ pong: true })));
     const client = createApiClient();
@@ -70,6 +82,7 @@ describe('비동기 parse', () => {
 // FE-T002: 오류 응답 정규화(G-D003, FE-D007)
 describe('HTTP 오류 정규화', () => {
   it('ProblemDetail의 code·title·detail·errors[]를 꺼낸다', async () => {
+    document.cookie = 'XSRF-TOKEN=t; path=/'; // POST는 CSRF 토큰이 있어야 보낸다(FE-D020)
     server.use(
       http.post('*/api/v1/members', () =>
         HttpResponse.json(

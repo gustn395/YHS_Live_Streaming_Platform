@@ -202,3 +202,129 @@ frontend 코드·의존성 변경 없음. Frontend CI가 실행할 명령(FE-T00
 
 - L3-1 실행의 audit 상세 Summary와 L3-2 원복 실행의 캐시 복원 로그는 미확인이다(같은 기능은 L3-3 실행에서 확인).
 - React Router `HydrateFallback` 경고와 Vitest 환경 생성 비용 안내는 L3-4b 실패와 무관하며 FE-02에서 고치지 않았다.
+
+### 2026-11-27 FE-03(Issue #20) 회원가입 화면·CSRF 연동 — 브랜치 `feature/20-frontend-signup`, 기준 커밋 d47736c + 작업 트리(커밋 전)
+
+환경: Windows 10, Node v24.19.0, npm 11.17.0. Worktree `YHS_Live_Streaming_Platform-fe03`. 새 의존성 없음(lockfile 변경 없음).
+
+| 명령 | 결과 |
+| --- | --- |
+| `npm ci` | exit 0(lockfile 그대로) |
+| `npm audit --omit=dev --audit-level=high` | exit 0(운영 의존성 high 이상 0건) |
+| `npm audit --json` | moderate 9건, high·critical 0건(FE-D015 위험 수용 대상 lint 체인). `npm audit fix` 미실행 |
+| TDD RED(구현 전) | `apiClient.csrf.test.ts` 14건·`errorPresentation.test.ts` 2건·`classifyInitFailure.test.ts` 1건·`signupValidation.test.ts` 50건·`signupApi.test.ts` 10건·`SignupForm.test.tsx` 23건·`SignupPage.test.tsx` 8건이 기능이 없어 실패함을 확인 |
+| `npx vitest run` | exit 0, 22파일 338건 통과(shared/api 113, features/auth 87, features/signup 83, app 16, src/test 25, scripts 14) |
+| `npm run typecheck` · `npm run lint` | 모두 exit 0 |
+| `npm run build` | exit 0, `check-dist: 가안 표지 없음`(JS 393.01 kB, CSS 3.56 kB) |
+
+- 의도된 기존 테스트 변경 1건: `apiClient.test.ts`의 "ProblemDetail의 code·title·detail·errors[]를 꺼낸다"는 POST를 보내므로 준비 단계에 CSRF 쿠키를
+  넣었다(이제 POST는 토큰이 없으면 `/csrf`를 먼저 호출한다, FE-D020). 검증 내용은 바꾸지 않았다.
+- 미실행: M-02(실제 Backend 수동 확인, 별도 승인 대기), M-01(FE-01부터 미실행), Safari 확인, FE-T018 GitHub Actions(PR 이후),
+  Backend `:app:build`(Backend 변경 없음).
+
+**S6 리뷰 반영 뒤 재검증 (2026-11-27, 같은 작업 트리)**
+
+| 명령·확인 | 결과 |
+| --- | --- |
+| TDD RED(수정 전) | `csrfToken.test.ts` 3건·`apiClient.csrf.test.ts` 1건·`signupValidation.test.ts` 2건·`SignupForm.test.tsx` 8건이 기대한 이유로 실패 |
+| 뮤테이션 확인(처음부터 통과한 회귀 테스트) | 제출 가드(`submittingRef`)·대기 시각 가드·언마운트 타이머 정리·언마운트 요청 취소를 하나씩 지우면 각 테스트가 실패함을 확인한 뒤 되돌림. 대기 시각 가드 테스트는 처음에 즉시 단언해 가드를 못 잡아서 200ms 대기 뒤 단언하도록 고침 |
+| Backend 이메일 판정 확인 | 로컬 Gradle 캐시의 Hibernate Validator 9.1.6·9.1.3 `EmailValidator`를 저장소 밖 임시 Java 파일로 실행. `"a b"@example.com`·`"a@b"@example.com` VALID, `a@@b.com`·`a b@c.com`·`a@b c.com` INVALID(두 버전 같음). 클라이언트 규칙을 이 결과에 맞춤 |
+| `npx vitest run` | exit 0, 23파일 366건 통과(shared/api 121, features/auth 87, features/signup 103, app 16, src/test 25, scripts 14) |
+| `npm run lint` | 첫 실행 exit 1(react-hooks purity: 컴포넌트 안 `Date.now()` 2곳) → 시간 계산을 컴포넌트 밖 함수로 옮긴 뒤 exit 0 |
+| `npm run typecheck` · `npm run build` | 모두 exit 0, `check-dist: 가안 표지 없음` |
+
+**S6 재리뷰(R1~R5)·후속 확인 반영 뒤 최종 재검증 (2026-11-27, 같은 작업 트리)**
+
+| 명령·확인 | 결과 |
+| --- | --- |
+| TDD RED(수정 전) | `signupValidation.test.ts` 이메일 4건(점으로 이은 따옴표 조각)·1건(따옴표 안 `\"`), `SignupForm.test.tsx` 2건(모두 낡은 결과 안내 R3, blur 요약 재알림 R2)이 기대한 이유로 실패 |
+| RED 미재현(회귀 감시로 둠) | R1·후속(렌더 사이 없는 연속 입력의 값·서버 오류 덮어쓰기), 재제출 뒤 요약 키 미리셋: React가 discrete 이벤트마다 반영하고 입력 change가 먼저 키를 끄므로 DOM 이벤트로 재현되지 않음. 코드는 ref·`updateErrors` 단일 경로로 바꿈 |
+| 뮤테이션 확인 | 언마운트 타이머 정리를 지우면 `clearTimeout` spy 테스트가 실패함을 확인 후 되돌림 |
+| Backend 이메일 판정 추가 확인 | Hibernate Validator 9.1.6 실행: `"a b".c@x.com`·`c."a b"@x.com`·`"a\"b"@x.com`·`"a\\b"@x.com` VALID, `"a""b"@x.com`·`a"b c"@x.com`·`""@x.com`·`"a\ b"@x.com`·`a\b@x.com`·`a..b@x.com`·`"a"b@x.com` INVALID |
+| 간헐 실패 | 중간 실행 1회에 기존 FE-01 테스트 `AuthProvider.test.tsx:271`("오류 상태에서 retry를 연달아 두 번 불러도…")이 `expected 'initializing' to be 'authenticated'`로 실패. 같은 파일 단독 6회·전체 이후 6회는 모두 통과. FE-03은 AuthProvider를 바꾸지 않았다. 부하 시 타이밍 문제로 보고 범위 밖 후속 후보로 남김(PASS로 숨기지 않음) |
+| `npx vitest run` | 최종 3회 연속 exit 0, 23파일 379건 통과(shared/api 121, features/auth 87, features/signup 116, app 16, src/test 25, scripts 14) |
+| `npm run lint` · `npm run typecheck` · `npm run build` | 모두 exit 0, `check-dist: 가안 표지 없음` |
+| 보이지 않는 문자 검사(`src`) | 0건 |
+
+**M-02 실제 Backend 수동 확인 (2026-11-27, 수동 — 자동 결과와 구분)**
+
+환경: Chrome 151.0.7922.138(공식 빌드, 64비트), Windows. Frontend `npm run dev`(localhost:5173, 프록시 대상 18080) — fe03 작업 트리(커밋 전).
+Backend: fe03 Worktree의 `backend/`(기준 커밋 `d47736c`), `:app:bootRun --no-daemon`(Java 17 toolchain), 포트 18080. 컨테이너
+`postgres:17-alpine`·`redis:7.4-alpine`·`axllent/mailpit:v1.21.0`(`--rm`, 루프백 전용 포트, 비밀번호 없는 구성). 비밀 키 3종은 실행 명령 안에서
+`openssl rand`로 만든 임시 값이고 어디에도 기록하지 않았다. 보안 설정·Rate Limit·HIBP는 바꾸지 않았다(HIBP 실제 호출).
+Backend 기준을 `origin/main`(`cea2deb`, BE-04 #19 포함)이 아닌 `d47736c`로 둔 근거(사용자 결정 Q1=a): BE-04의 Backend 변경은 refresh·logout API와
+`NullAuthenticatedSessionStrategy`(인증된 요청의 XSRF 쿠키 삭제 결함 수정)이고, 회원가입 API·`/csrf` 발급·익명 요청의 CSRF 검증은 바꾸지 않았다
+(`git diff d47736c origin/main`의 `GlobalSecurityConfig`·`ApiV1AuthController` 확인). 최신 main 위에서 실행한 것은 아니다.
+
+기동 확인(Claude 실행): health `UP`, Flyway `v20261126.1` 적용, 프록시 경유 `GET /api/v1/auth/csrf` 204 + `Set-Cookie: XSRF-TOKEN=…; Path=/; Secure; SameSite=Strict`, `Cache-Control: no-store`.
+
+| M-02 항목 | 결과(사용자 Chrome 확인) |
+| --- | --- |
+| 1 가입 201, CSRF 쿠키와 요청 헤더, 완료 화면 | PASS |
+| 2 완료 화면 새로고침·뒤로 가기·직접 접근 | PASS |
+| 3 `GET /csrf`에 `X-XSRF-TOKEN` 없음(M-01 범위와 같음) | PASS |
+| 4 중복 아이디 409: 필드 오류·요약·포커스 | PASS |
+| 5 유출 비밀번호 안내 | PASS |
+| 6 CSRF 403: 보안 확인 만료 안내·입력 유지·자동 재전송 없음 | PASS(유도 방법 아래) |
+| 7 재제출 → `GET /csrf` 204 → `POST /signup` 201 → 완료 화면 | PASS |
+| 8 잘못된 이메일의 실제 Backend 400 필드 표시 | 미실행(사용자 생략). 같은 동작은 자동 테스트 FE-T026으로만 검증 |
+| 9 폭 320px 가로 스크롤 없음(`scrollWidth <= clientWidth` = true)·다크 모드·대비 | PASS. 구체적인 대비 수치는 기록하지 않음 |
+| 추가: 429 대기 안내 | "요청이 많습니다. 약 58분 뒤 다시 시도해 주세요." 표시를 사용자가 확인. 그때 버튼 비활성 여부는 미확인 |
+
+- 429 경위: 가입 IP 카운터가 7(허용 5 + 거부 2로 추정, 모든 요청이 프록시를 거쳐 `127.0.0.1` 하나로 집계)이 되어 한도(시간당 5회, MB-D018)에 걸렸다.
+  사용자 결정으로 M-02 전용 Redis의 `ratelimit:signup:*` 키 1개만 지워 시험 데이터를 1회 초기화했다(한도·설정은 그대로).
+- CSRF 403 유도: 처음 안내한 "DevTools Override headers"는 요청 헤더를 바꾸지 못해 쓸 수 없었다(안내 오류). Console에서 `path=/signup`인 가짜
+  `XSRF-TOKEN` 쿠키를 더해 가입 화면 JS가 가짜 값을 헤더에 싣게 하고(서버에는 `Path=/` 진짜 쿠키만 전달) 403을 유도했다. 복구는 그 쿠키를 지운 뒤
+  다시 제출했다. 가짜 쿠키를 지우지 않으면 `/csrf` 재확보 뒤에도 403이 반복된다(같은 이름 쿠키가 여러 Path에 있는 경우, S6 1차 리뷰 보류 항목과 같음).
+- 미확인: Safari, CSRF 토큰 값이 갱신됐는지(Backend는 쿠키가 있으면 같은 값을 쓴다), 429 때 버튼 비활성 상태.
+- 정리: Frontend·Backend 프로세스 종료(TaskStop 뒤 남은 Java PID 24848·Vite PID 16312를 명령줄로 확인하고 종료), 컨테이너 3개 정지(`--rm`로 삭제),
+  포트 18080·5173·15432·16379·11025·18025 해제 확인. 다른 컨테이너는 건드리지 않았다.
+
+### 2026-11-27 FE-03(Issue #20) CodeRabbit 리뷰 반영 — 기준 커밋 acf2c7e + 작업 트리(커밋 전)
+
+대상: CodeRabbit CR-1~CR-10(CR-7 거부·주석만), 결정 [FE-D032](decisions.md#1-확정-결정). 모두 Claude가 실행했고 Backend는 실행하지 않았다.
+
+| 단계 | 명령 | 결과 |
+| --- | --- | --- |
+| RED | `npx vitest run src/features/signup src/shared/api/apiClient.test.ts` | 새 테스트 10건 실패(기대한 이유): signupApi 200·202 성공 처리, apiClient parse 상태 코드 미전달, CR-4 토글 글자, CR-3 포커스, CR-5 서버 오류 필드 재검사, CR-6 폼 200, CR-9 400 + 중복 코드, CR-10 2건 |
+| 처음부터 통과(RED 아님) | 같은 명령 | CR-2 부재 단언 보강 2건, CR-8 비CSRF 403, CR-10 유출 오류 유지, signupApi 204 |
+| GREEN | 같은 명령 | 144건 통과 |
+| Mutation | 임시 변경 뒤 해당 테스트만 실행, 파일 복원(`cmp` 일치) | 늦은 오류 필터 끔 → CR-2 테스트 실패. 403에서 배너 없이 종료 → CR-8 실패. 유출 오류 의존에 username 추가 → CR-10 유지 테스트 실패. 상태 201 검사 제거·이어서 null 본문 검사 제거 → 204 테스트는 계속 통과(본문 형식 검사가 따로 막음). 상태 검사 자체는 200·202 RED로 확인 |
+| S5 | `npm --prefix frontend run lint` | 종료 0 |
+| S5 | `npm --prefix frontend run typecheck` | 종료 0 |
+| S5 | `npm --prefix frontend run test -- --run` | 23파일 392건 통과(FE-01 포함 전체) |
+| S6 반영 | 제품 코드 주석의 CR 번호를 결정 ID로 교체 뒤 lint·typecheck·test·build | 종료 0, 392건 통과, build 0 |
+| S6 재리뷰 Q1=a RED | `npm --prefix frontend run test -- --run src/features/signup/SignupForm.test.tsx -t "유출 코드라도 400이 아니면"` | 1건 실패(기대한 이유: 409 + 유출 코드에 공통 배너 없음) |
+| S6 재리뷰 Q1=a GREEN·S5 | lint·typecheck·`test -- --run`·build | 종료 0, 23파일 393건 통과, build 0 |
+| S5(최종) | lint·typecheck·`test -- --run`·build, 보이지 않는 문자 검사, `git diff --check` | 종료 0, 23파일 393건 통과, build 0, 0건, 오류 없음 |
+
+- S7(이해도 퀴즈)은 사용자 결정으로 생략했다(질문 1/6만 출제, 답 없음). Skill 게이트 확인은 S7 미완료 1건으로 종료 코드 1이다.
+| S5 | `npm --prefix frontend run build` | 종료 0, check-dist 가안 표지 없음 |
+| S5 | 보이지 않는 문자 검사(Python, `frontend/src`·`docs/frontend`), `git diff --check` | 0건, 오류 없음 |
+
+- 수 집계용 JSON 실행(`npm --prefix frontend exec -- vitest run --reporter=json`)은 저장소 루트에서 실행돼 Vitest 설정(jsdom)을 읽지 못하고
+  167건이 `document is not defined`로 실패했다. 실행 방법 오류라 결과로 쓰지 않고 파일별 테스트 수만 셌다.
+- 미실행: CR-1(`overflow-wrap: anywhere`) 긴 아이디 안내 줄바꿈과 토글 눌림 스타일의 브라우저 수동 확인. 실제 Backend 연동(M-02) 재실행.
+
+### 2026-11-27 FE-03(Issue #20) member BE-06 가입 정책 반영 — 기준 커밋 23fc681 + 작업 트리(커밋 전)
+
+대상: [FE-D033](decisions.md#1-확정-결정)(비밀번호 길이 MB-D026, 가입 제한 MB-D027). Backend 계약 근거는 `origin/feature/24-member-signup-policy`
+(`dd071d6`, main 미병합)의 `PasswordPolicy`(10~30)·`PasswordViolation`(문구)·`MemberLimitProperties`(10분 20회)를 읽기 전용으로 확인했다.
+모두 Claude가 실행했고 Backend는 실행하지 않았다.
+
+| 단계 | 명령 | 결과 |
+| --- | --- | --- |
+| RED | `npm --prefix frontend run test -- --run src/features/signup` | 6건 실패(기대한 이유): 10·9자, code point(이모지 9·10·30·31), 30·31자, 공백 포함 10·9자, 오류 문구, 안내 문구 |
+| 처음부터 통과(RED 아님) | 같은 명령 | NFC 정규화 뒤 길이(NFD 9·30자), Retry-After 600·601·3600초 3건 |
+| Mutation | 임시 변경 뒤 해당 테스트만 실행, 파일 복원(`cmp` 일치) | NFC 정규화 제거 → NFC 테스트 실패. `Math.ceil` → `Math.round` → 601초 테스트 실패. `blockUntil` 제거 → Retry-After 3건 실패 |
+| GREEN 첫 전체 실행 | `npm --prefix frontend run test -- --run` | 1건 실패: `src/test/eslintBoundaries.test.ts` "shared → features"(15691ms). 단독 실행 25건 통과, 바로 다시 한 전체 실행 397건 통과. 원인 미확정(이번 변경과 무관한 파일), 간헐 실패로 기록 |
+| S5 | `npm --prefix frontend run lint` / `typecheck` | 종료 0 / 종료 0 |
+| S5 | `npm --prefix frontend run test -- --run` 2회 | 23파일 397건 통과 2회 |
+| S5 | `npm --prefix frontend run build` | 종료 0, check-dist 가안 표지 없음 |
+| S5 | 보이지 않는 문자 검사, `git diff --check`, 제한 수치 grep(`20회`·`10분`·`시간당`·`600`, 테스트 제외) | 0건, 오류 없음, 가입 제한 수치 없음(요청 Timeout 주석 1건만) |
+
+- FE-D033 (5) 계약 확인(BE-06 main 병합 뒤): `origin/main` `774b493`(#25)의 Backend는 `dd071d6`과 diff 없음. `PasswordPolicy`는 `PasswordNormalization.nfc` 뒤 `codePointCount`로 10~30, `PasswordViolation` 문구 2개가 Frontend `MESSAGES`와 같음, `MemberLimitProperties` signup은 `Window(20, 10분)`이고 Frontend 코드에는 수치 없음. main은 `d47736c` 이후 Frontend 파일을 바꾸지 않았다. 함께 실행한 Vitest 전체는 위 S5(397건)다.
+- 이 브랜치의 `docs/member/decisions.md`에는 MB-D026·D027이 없다(main에만 있음). main 반영(병합·rebase)은 승인 범위 밖이라 하지 않았고, Squash Merge 뒤 main에서 링크가 이어진다.
+- S6 반영(문서 3건) 뒤 S5 재실행: lint·typecheck 0, 23파일 397건 통과, build 0, 보이지 않는 문자 0건, `git diff --check` 오류 없음.
+- S7(이해도 퀴즈)은 사용자 결정으로 생략했다(질문 1/6만 출제, 답 없음). Skill 게이트 확인은 S7 미완료 1건으로 종료 코드 1이다.
+- 미실행: 실제 Backend 연동(FE-D033 (5)에 따라 코드 비교 + Vitest 전체로 대신함), 안내 문구의 브라우저 표시 확인.
