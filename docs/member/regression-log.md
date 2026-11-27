@@ -87,5 +87,21 @@
 | 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#24 S6 반영 뒤 S5: PROGRESS 안건 축약, Swagger 429 문구, 테스트 이름) | 성공(exit 0). member 264, app 130 통과 | |
 | 2026-11-27 | `.\gradlew.bat :app:build` (#24 Commit 직전) | 성공(exit 0). WAR 2개(실행 가능·plain), `:app:test` UP-TO-DATE(직전 --rerun 통과) | S7 미실행(사용자 지시) |
 | 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#24 S10 뒤 최종 S5) | 성공(exit 0). member 264, app 130 통과 | S10 0건, 코드 변경 없음 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:compileTestJava :app:compileTestJava --continue` (#27 테스트 작성 후, 구현 전 RED 1) | 실패(의도). 컴파일 오류: `member.app.api`·`MemberProfileService` 등 없음 | |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*MemberProfileServiceTest" --tests "*MemberQueryServiceTest" --tests "*MemberRepositoryAdapterTest" :app:test --tests "*MemberProfileApiIntegrationTest" --tests "*MemberOpenApiIntegrationTest" --tests "*ModuleBoundaryTest" --continue` (#27 껍데기 뒤 RED 2) | 실패(의도). member 25건 중 13 실패(기능 없음), app은 기존 `AuthStoreFailureIntegrationTest` 대역이 새 포트 메서드를 구현하지 않아 컴파일 실패 → 대역에 위임 메서드 추가 | |
+| 2026-11-27 | 같은 app 명령 (대역 보완 뒤 RED 2) | 실패(의도). app 13건 중 8 실패(엔드포인트 없음) | 통과 5건: 미인증 401·CSRF 403(기존 보안 체인), `ModuleBoundaryTest` 3(현재 위반 없음, 위반 대상은 잡음) |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test :app:test --continue` (#27 구현 후 GREEN) | 성공(exit 0). member 278, app 143 통과 | MB-T055~T060, GL-T019 포함 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#27 S5) | 성공(exit 0). member 278, app 143 통과 | global은 코드 변경 없어 실행 안 함(ArchUnit은 app 테스트) |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*MemberProfileServiceTest" --tests "*MemberQueryServiceTest" --continue` (#27 S6 지적 회귀 테스트, 수정 전 RED) | 실패(의도). 15건 중 1 실패(`committedNicknameChangeIsReturnedEvenIfDisabledRightAfter`: 반영된 닉네임 변경 뒤 정지되면 403) | 재시도·상태 매핑 테스트는 기존 동작을 고정하는 테스트라 통과 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#27 S6 반영 뒤 S5) | 성공(exit 0). member 281, app 147 통과 | 추가: PENDING·GOOGLE 닉네임·Redis 장애 503 통합, ArchUnit 클래스 로드 확인 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*MemberRepositoryAdapterTest" :app:test --tests "*ModuleBoundaryTest" --tests "*MemberProfileApiIntegrationTest" --tests "*AuthStoreFailureIntegrationTest" --continue` (#27 검증 공백 6건 회귀 감시 테스트, 사용자 Q1=a) | 성공(exit 0) | 테스트 전용(제품 코드 변경 없음). 이미 맞는 동작을 고정하므로 처음부터 통과(RED 없음). ①② ArchUnit은 위반 대상으로 규칙이 실제로 잡는지 확인 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#27 S5) | 성공(exit 0). member 281, app 152 통과 | |
+| 2026-11-27 | `.\gradlew.bat :app:build` (#27 Commit 직전) | 성공(exit 0). WAR 2개(실행 가능·plain), `:app:test` UP-TO-DATE(직전 --rerun 통과) | S7 5/5 완료 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*MemberProfileServiceTest" :app:test --tests "*MemberOpenApiIntegrationTest" --continue` (#27 CodeRabbit 반영, 수정 전 RED) | 실패(의도). member 10건 중 1 실패(재시도 직전 정지 → 500), app 1건 실패(PATCH 보안 요구사항 원소 2개) | 테스트 대역 `forcedUpdateRows` 보정(0만 강제, 성공은 실제 경로)과 재시도 닉네임 단언 추가 포함 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*MemberProfileServiceTest" :app:test --tests "*MemberOpenApiIntegrationTest" --tests "*AuthOpenApiIntegrationTest" --tests "*SignupOpenApiIntegrationTest" --continue` (수정 뒤 GREEN) | 성공(exit 0) | 기존 인증 API Spec 영향 없음 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#27 Phase 5 S5) | 성공(exit 0). member 282, app 152 통과 | |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#27 Phase 5 S6 재리뷰 반영 뒤 S5: 재시도 401 테스트, GET CSRF 없음 단언, Spec 주석) | 성공(exit 0). member 283, app 152 통과 | |
+| 2026-11-27 | `.\gradlew.bat :app:build` (#27 Phase 5 Commit 직전) | 성공(exit 0). WAR 2개, `:app:test` UP-TO-DATE(직전 --rerun 통과) | S10 0건, S7 미실행(사용자 Q1=a, PASS 아님) |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#27 Phase 5 S10 뒤 최종 S5) | 성공(exit 0). member 283, app 152 통과 | S10 0건, 코드 변경 없음 |
 
 - 미실행: 로컬 전체 `./gradlew clean build`(빌드 정책상 실행하지 않음).

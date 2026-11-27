@@ -86,4 +86,14 @@ class RedisUnavailableIntegrationTest {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("AUTH_SESSION_STORE_UNAVAILABLE"));
     }
+
+    @Test
+    void myProfileIsServiceUnavailableWhenSessionStoreIsDown() throws Exception { // MB-T055(MB-D028, G-D007)
+        String sid = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE";
+        String token = issuer.issue(42L, "USER", sid, Instant.now().plus(Duration.ofDays(1))).value();
+
+        mockMvc.perform(get("/api/v1/members/me").cookie(new Cookie(AuthCookieNames.ACCESS_TOKEN, token)))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("AUTH_SESSION_STORE_UNAVAILABLE"));
+    }
 }

@@ -7,7 +7,10 @@ import com.yhs.livestreaming.member.domain.AccountStatus;
 import com.yhs.livestreaming.member.domain.AccountType;
 import com.yhs.livestreaming.member.domain.Member;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -84,6 +87,19 @@ public class MemberRepositoryAdapter implements MemberRepository {
     @Override
     public int activatePending(long id, Instant createdAfter, Instant now) {
         return jpa.activatePending(id, createdAfter, now, AccountStatus.PENDING, AccountStatus.ACTIVE);
+    }
+
+    @Override
+    public List<Member> findAllByIds(Collection<Long> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return jpa.findAllById(Set.copyOf(ids));
+    }
+
+    @Override
+    public int updateNicknameOfActive(long id, String nickname, Instant now) {
+        return jpa.updateNicknameOfActive(id, nickname, now, AccountStatus.ACTIVE);
     }
 
     private static BusinessException duplicate(MemberErrorCode errorCode) {

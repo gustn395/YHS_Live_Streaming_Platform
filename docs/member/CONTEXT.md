@@ -10,7 +10,7 @@
 ## 2. 액터
 
 - 방문자: 아직 회원이 아니거나 로그인하지 않은 사용자. 회원가입·로그인을 한다.
-- 회원: 가입한 사용자. 로그인(BE-03)으로 토큰을 받는다. 회원 정보 조회는 이후 작업.
+- 회원: 가입한 사용자. 로그인(BE-03)으로 토큰을 받는다. 자기 정보를 조회하고 닉네임을 바꾼다(MB-W15).
 
 ## 3. 유스케이스
 
@@ -18,6 +18,7 @@
 - 로그인(MB-W06~W08, BE-03): 방문자가 username·비밀번호로 1차 인증을 통과하면 OTP Challenge가 생기고 이메일로 OTP를 받는다. OTP를 확인하면 로그인 세션과 토큰이 발급되고, PENDING 회원은 ACTIVE가 된다([MB-D011](decisions.md#1-확정-결정), [MB-D015](decisions.md#1-확정-결정)).
 - Refresh(MB-W09, BE-04): 회원이 Refresh Token으로 같은 로그인 세션에서 새 Access·Refresh Token을 받는다. 로그인 세션의 절대 만료 시각(최초 로그인 + 7일)은 그대로이고 늘어나지 않는다. Refresh마다 회원 상태를 다시 확인한다([MB-D020](decisions.md#1-확정-결정), [MB-D021](decisions.md#1-확정-결정)).
 - 로그아웃(MB-W10, BE-04): 회원이 이 브라우저가 쥔 로그인 세션을 서버에서 폐기하고 인증 쿠키를 지운다([MB-D022](decisions.md#1-확정-결정)).
+- 내 정보 조회·수정(MB-W15, BE-07): 로그인한 회원이 자기 정보를 보고 닉네임을 바꾼다. 정지된 회원은 쓸 수 없고 그 세션은 폐기된다([MB-D028](decisions.md#1-확정-결정)). 다른 모듈은 공개 인터페이스로 회원 요약만 조회한다([MB-D029](decisions.md#1-확정-결정)).
 - Google 로그인(MB-W11, BE-05): 방문자가 Google 인증(OIDC)을 1차 인증으로 통과하면 LOCAL과 같이 OTP Challenge가 생기고 이번 Google 이메일로 OTP를 받는다. 처음이면 PENDING GOOGLE 회원이 자동으로 생긴다. OTP를 확인하면 로그인 세션과 토큰이 발급되고 PENDING 회원은 ACTIVE가 된다([MB-D023](decisions.md#1-확정-결정)~[MB-D025](decisions.md#1-확정-결정)).
 
 ## 4. 모듈 용어

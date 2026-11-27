@@ -53,4 +53,12 @@ interface MemberJpaRepository extends JpaRepository<Member, Long> {
             + "and m.createdAt <= :expiredAtOrBefore")
     int deleteExpiredPending(@Param("id") long id, @Param("expiredAtOrBefore") Instant expiredAtOrBefore,
                              @Param("type") AccountType type, @Param("pending") AccountStatus pending);
+
+    /** 닉네임 수정(MB-D028): ACTIVE 회원만 바꾼다. 상태 확인과 변경을 한 문장으로 해 그 사이 정지된 회원을 바꾸지 않는다. */
+    @Transactional
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update Member m set m.nickname = :nickname, m.updatedAt = :now "
+            + "where m.id = :id and m.accountStatus = :active")
+    int updateNicknameOfActive(@Param("id") long id, @Param("nickname") String nickname, @Param("now") Instant now,
+                               @Param("active") AccountStatus active);
 }

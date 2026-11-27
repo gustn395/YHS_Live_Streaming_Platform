@@ -95,6 +95,16 @@ class SignupServiceTest {
         }
 
         @Override
+        public java.util.List<Member> findAllByIds(java.util.Collection<Long> ids) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int updateNicknameOfActive(long id, String nickname, java.time.Instant now) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public boolean existsByUsername(String username) {
             return usernameExists;
         }

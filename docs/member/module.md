@@ -30,11 +30,13 @@
 | `app.oauth` | `GoogleLoginService`, `GoogleIdentity`, `GoogleNickname`, `GoogleAccountRepository`(포트), `GoogleLinkConflictException`, `OAuthStateStore`(포트), `OAuthFailure`, `OAuthLoginException` | Google 1차 인증 뒤 GOOGLE 회원 확인·자동 가입·재생성과 OTP 시작(아래 "Google 로그인") |
 | `app.limit` | `MemberLimitProperties`, `RequestRateLimiter`(포트), `LoginAttemptLimiter`(포트), `RateLimitScope` | 제한 수치·포트([MB-D017](decisions.md#1-확정-결정)·[MB-D018](decisions.md#1-확정-결정)·[MB-D027](decisions.md#1-확정-결정)) |
 | `app.session` | `LoginSessionStore`(포트: create·findRefresh·rotate·revoke), `NewLoginSession`, `RefreshTokenRecord`, `RefreshRotation`, `RandomTokens`, `MemberAccessTokenRoles` | 세션·Refresh 저장·교체·폐기 계약, 256비트 난수·SHA-256, JWT `role` 허용 값 |
+| `app.profile` | `MemberProfileService`, `MemberProfile`, `MemberQueryService`(공개 인터페이스 구현, package-private) | 내 정보 조회·닉네임 수정과 매 요청 상태 재확인([MB-D028](decisions.md#1-확정-결정)), 다른 모듈용 회원 조회 구현([MB-D029](decisions.md#1-확정-결정)) |
+| `app.api` | `MemberQueryApi`, `MemberSummary`, `MemberAccountStatus` | 다른 모듈이 참조할 수 있는 유일한 member 패키지([G-D015](../policy.md#3-공통-결정-이력)) |
 | `app.password` | `DummyPasswordHash` | 없는 username·GOOGLE 로그인의 같은 비용 비교 |
 | `out` | `MemberJpaRepository`, `MemberRepositoryAdapter`, `OAuthAccountJpaRepository`, `GoogleAccountRepositoryAdapter`(트랜잭션 직접, provider·sub UNIQUE 충돌만 동시 가입으로 변환), `HibpPwnedPasswordsClient`, `HibpProperties`, `HibpClientConfig` | HIBP: 아래 "유출 비밀번호 검사". 저장: `saveAndFlush`로 즉시 INSERT하고, `uk_members_username`·`ux_members_local_email` 위반만 409로 바꾼다. 그 밖의 제약 위반은 제약 이름·SQLState만 WARN으로 남기고 원인 없는 `IllegalStateException`(500)으로 던진다(DB 상세에 든 개인정보를 응답·로그에 싣지 않으려고). 로그인용 `findByUsername`·`findById`, 조건부 UPDATE 2개(재해시: 기존 해시 조건, 활성화: PENDING·`created_at > now-24h` 조건, 둘 다 짧은 트랜잭션 하나) |
 | `out.redis` | `RedisLoginSessionStore`(+`LoginSessionVerifier` 구현), `RedisOtpChallengeStore`, `RedisOAuthStateStore`, `RedisLoginAttemptLimiter`, `RedisRequestRateLimiter`, `RedisLuaScripts`, `RedisKeys` | 아래 "Redis 키·Lua". Redis 오류는 인증 흐름 503 `AUTH_SESSION_STORE_UNAVAILABLE`, 요청 제한 503 `COMMON_RATE_LIMIT_UNAVAILABLE` |
 | `out.mail` | `SmtpOtpMailSender`, `MemberOtpMailProperties`, `MemberMailConfig`, `OtpDeliveryException` | SMTP 동기 발송, 실패는 원인·주소·OTP 없는 예외 |
-| `in` | `ApiV1AuthController`, `ApiV1AuthSpec`, `AuthCookieWriter`, `MemberAuthCookies`(Refresh·Challenge 쿠키 이름·Refresh Path), `ClientIp`, `dto/SignupRequest`·`SignupResponse`·`LoginRequest`·`OtpVerifyRequest`·`OtpRequiredResponse`·`LoginSuccessResponse`, `ValidSignupPassword`, `SignupPasswordValidator`, `MemberPublicEndpoints`, Google: `MemberOAuthSecurityConfig`, `MemberOAuthProperties`, `OAuthCookieAuthorizationRequestRepository`, `GoogleLoginSuccessHandler`, `GoogleLoginFailureHandler`, `OAuthRateLimitFilter`, `OAuthRedirects` | 가입·로그인·OTP·Refresh·로그아웃 API. IP 제한은 가입·로그인·OTP·Refresh에서 서비스보다 먼저 건다(로그아웃은 IP 제한 없음, MB-D022). 쿠키 발급·삭제는 `AuthCookieWriter` 한 곳(HttpOnly·Secure·Strict·Domain 없음, Max-Age = 만료까지 남은 초 올림). 공개 경로(Access 인증 없이 호출, 모두 CSRF 필요): signup·login·otp/verify·otp/resend·refresh·logout |
+| `in` | `ApiV1AuthController`, `ApiV1AuthSpec`, `ApiV1MemberController`·`ApiV1MemberSpec`(내 정보, `dto/MemberProfileResponse`·`NicknameUpdateRequest`), `AuthCookieWriter`, `MemberAuthCookies`(Refresh·Challenge 쿠키 이름·Refresh Path), `ClientIp`, `dto/SignupRequest`·`SignupResponse`·`LoginRequest`·`OtpVerifyRequest`·`OtpRequiredResponse`·`LoginSuccessResponse`, `ValidSignupPassword`, `SignupPasswordValidator`, `MemberPublicEndpoints`, Google: `MemberOAuthSecurityConfig`, `MemberOAuthProperties`, `OAuthCookieAuthorizationRequestRepository`, `GoogleLoginSuccessHandler`, `GoogleLoginFailureHandler`, `OAuthRateLimitFilter`, `OAuthRedirects` | 가입·로그인·OTP·Refresh·로그아웃 API. IP 제한은 가입·로그인·OTP·Refresh에서 서비스보다 먼저 건다(로그아웃은 IP 제한 없음, MB-D022). 쿠키 발급·삭제는 `AuthCookieWriter` 한 곳(HttpOnly·Secure·Strict·Domain 없음, Max-Age = 만료까지 남은 초 올림). 공개 경로(Access 인증 없이 호출, 모두 CSRF 필요): signup·login·otp/verify·otp/resend·refresh·logout |
 
 - 비밀번호 해시 포맷: `pbkdf2-sha256$v1$nfc$i=<반복 횟수>$k=<키 ID>$<Salt Base64>$<해시 Base64>`. Salt 16바이트(SecureRandom), PBKDF2 출력 256비트, 최종 HMAC-SHA256(pepper) 256비트, Base64는 패딩 없음. 검증은 `MessageDigest.isEqual`(일정 시간). 포맷 오류·키 ID 불일치는 불일치로 처리한다.
 - 비밀번호 정책([MB-D026](decisions.md#1-확정-결정)): NFC 뒤 code point 10~30자(가입 검증기에서만 검사하고 로그인은 길이를 보지 않아 이전 15~64자 비밀번호도 로그인 가능). 문맥 단어 판정은 "소문자 → 글자·숫자만 → 끝 숫자 제거"한 핵심어가 username·서비스 이름(`yhslivestreaming`·`yhslive`·`livestreaming`·`yhs`)의 핵심어와 같으면(뒤집은 경우 포함) 거부한다. 끝 숫자는 code point 단위로 뗀다. 또 글자·숫자만 남긴 값(끝 숫자를 떼기 전)이 username과 같거나 뒤집어 같으면 거부한다(숫자·밑줄만인 username 대비). 대소문자는 구분하지 않는다.
@@ -115,9 +117,21 @@ username·IP는 SHA-256 hex로 키에 쓴다. 원문이 키 목록에 남지 않
 - Spring `RestClient`를 쓰지 않는 이유: I/O 예외 메시지에 요청 URL(앞 5자 포함)이 들어간다. JDK HttpClient 내부 로그(`jdk.httpclient.HttpClient.log`, `jdk.internal.httpclient.debug`)는 요청 URI를 출력하므로 운영에서 켜지 않는다.
 - 운영 조건: 서버에서 `api.pwnedpasswords.com:443`으로 나가는 통신이 허용돼야 한다. 막히면 가입이 503이다.
 
+### 내 정보 (BE-07)
+
+- 조회(`MemberProfileService.getMyProfile`): global 체인의 Access 쿠키·세션 검증 뒤 DB에서 회원을 다시 읽는다. 없음·PENDING이면 `LoginSessionStore.revoke(sid, memberId)` 후 401 `AUTH_UNAUTHENTICATED`, DISABLED면 같은 폐기 후 403 `MEMBER_ACCOUNT_DISABLED`. 폐기 중 Redis 장애는 503([MB-D019](decisions.md#1-확정-결정)).
+- 닉네임 수정(`changeNickname`): 포트 `MemberRepository.updateNicknameOfActive`(어댑터는 ACTIVE 조건 UPDATE 한 문장) → 0행이면 위 상태 확인(세션 폐기·예외), 그 사이 다시 ACTIVE면 한 번 더 시도(또 0행이면 상태를 다시 확인해 정지·삭제면 세션 폐기·403/401, 여전히 ACTIVE면 `IllegalStateException`) → 다시 읽어 응답. UPDATE가 반영된 뒤에는 바로 정지돼도 바뀐 정보를 200으로 돌려준다(커밋한 변경을 403으로 알리지 않음). 닉네임 형식은 `NicknameUpdateRequest`(앞뒤 공백 제거, 2~20자, Cc·Cf 금지)가 검증한다.
+- 컨트롤러(`ApiV1MemberController`): 401(회원 없음)·403(DISABLED)일 때만 `AuthCookieWriter.clearTokens`. 공개 경로가 아니라 global 체인이 인증을 요구한다.
+- OpenAPI(`MemberOpenApiConfig`, `OperationCustomizer`): `ApiV1MemberController` operation의 보안 요구사항이 여러 개면 하나로 합친다(배열 원소는 OR, 원소 안의 스킴은 AND라서 PATCH는 "Access 쿠키 그리고 CSRF 헤더").
+
 ## 3. 공개 API
 
-- 다른 모듈에 줄 공개 API(회원 조회 등)는 아직 없다(MB-U 후보: broadcast 착수 전).
+- `com.yhs.livestreaming.member.app.api.MemberQueryApi`(Spring Bean, 구현은 `app.profile.MemberQueryService`, 읽기 전용 트랜잭션, [MB-D029](decisions.md#1-확정-결정)):
+  - `findById(long)` → `Optional<MemberSummary>`
+  - `findAllByIds(Collection<Long>)` → `List<MemberSummary>`: 최대 `MAX_BATCH_SIZE`(100)개(중복 포함, 넘으면 `IllegalArgumentException`), 빈 목록이면 조회 없이 빈 결과, 없는 ID는 빠지고 같은 ID는 한 번, 순서 보장 없음
+  - `isActive(long)`: ACTIVE일 때만 참
+- `MemberSummary(memberId, nickname, role, accountStatus)`: role은 문자열(`AuthenticatedMember.role`과 같은 값, G-D006), accountStatus는 공개 enum `MemberAccountStatus`(PENDING·ACTIVE·DISABLED). email·username은 없다.
+- 다른 모듈은 이 패키지만 참조한다. `app` 모듈 테스트 `ModuleBoundaryTest`(ArchUnit)가 검사한다([G-D015](../policy.md#3-공통-결정-이력)).
 
 ## 4. 다른 모듈 의존
 
@@ -145,6 +159,8 @@ username·IP는 SHA-256 hex로 키에 쓴다. 원문이 키 목록에 남지 않
 | POST | `/api/v1/auth/refresh` | 공개(CSRF, Refresh 쿠키, IP 제한) | 200 `LoginSuccessResponse` + 새 `__Host-yhs_at`·`__Secure-yhs_rt`(CSRF 토큰은 그대로) | 401 `AUTH_REFRESH_INVALID`·403 `MEMBER_ACCOUNT_DISABLED`(둘 다 Access·Refresh 쿠키 삭제), 403 `AUTH_CSRF_INVALID`, 429 `COMMON_TOO_MANY_REQUESTS`, 500 `COMMON_INTERNAL_ERROR`(회원 조회 장애), 503 `COMMON_RATE_LIMIT_UNAVAILABLE`(IP 제한 단계)·`AUTH_SESSION_STORE_UNAVAILABLE`(세션 저장소 단계). 401·403(회원 상태) 외에는 쿠키 유지 |
 | GET | `/api/v1/auth/oauth2/authorization/google` | 공개(OAuth 체인, IP 제한) | 302 Google 인가 + `__Host-yhs_oauth`(Lax) | 302 `/login?error=rate_limited`·`temporarily_unavailable` |
 | GET | `/api/v1/auth/oauth2/code/google` | 공개(OAuth 체인, state+쿠키, IP 제한=login) | 302 OTP 화면 + `__Host-yhs_otp`, `__Host-yhs_oauth` 삭제(인증 쿠키 없음) | 302 `/login?error=` oauth_failed·oauth_email_unverified·account_disabled·rate_limited·otp_delivery_failed·temporarily_unavailable |
+| GET | `/api/v1/members/me` | 인증(Access 쿠키) | 200 `MemberProfileResponse(memberId, accountType, username(GOOGLE null), email, emailVerified, nickname, role, accountStatus)` | 401 `AUTH_UNAUTHENTICATED`(인증 없음·세션 없음, 또는 회원 없음·PENDING이면 세션 폐기+인증 쿠키 삭제), 403 `MEMBER_ACCOUNT_DISABLED`(세션 폐기+인증 쿠키 삭제), 503 `AUTH_SESSION_STORE_UNAVAILABLE` |
+| PATCH | `/api/v1/members/me` | 인증(Access 쿠키, CSRF) | 200 `MemberProfileResponse`(닉네임만 수정, ACTIVE 조건 UPDATE) | 400 `COMMON_INVALID_INPUT`+`errors[]`(닉네임 MB-D008), 401·403·503은 GET과 같음, 403 `AUTH_CSRF_INVALID` |
 | POST | `/api/v1/auth/logout` | 공개(CSRF, IP 제한 없음) | 204 + Access·Refresh·Challenge 쿠키 삭제 + 새 `XSRF-TOKEN` | 403 `AUTH_CSRF_INVALID`, 503 `AUTH_SESSION_STORE_UNAVAILABLE`(쿠키·CSRF 유지) |
 
 - `GET /api/v1/auth/csrf`(CSRF 토큰 초기 발급)는 global이 제공한다([docs/global/module.md](../global/module.md)).

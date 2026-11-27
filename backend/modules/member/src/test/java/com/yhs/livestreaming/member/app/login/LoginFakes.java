@@ -102,6 +102,16 @@ final class LoginFakes {
             }
             return 0;
         }
+
+        @Override
+        public java.util.List<Member> findAllByIds(java.util.Collection<Long> ids) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int updateNicknameOfActive(long id, String nickname, Instant now) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     /** "pw:<원문>" 형식 해시. 호출을 기록한다. */

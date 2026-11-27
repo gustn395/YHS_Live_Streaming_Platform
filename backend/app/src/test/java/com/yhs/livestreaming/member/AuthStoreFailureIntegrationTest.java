@@ -1,6 +1,7 @@
 package com.yhs.livestreaming.member;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -194,6 +195,23 @@ class AuthStoreFailureIntegrationTest {
         assertThat(redis.keys("auth:session:*")).hasSize(1);
         failSwitch.memberLookup = false;
         mockMvc.perform(refresh(auth)).andExpect(status().isOk());
+    }
+
+    @Test
+    void databaseFailureDuringMyProfileKeepsSessionAndCookies() throws Exception { // MB-T056(MB-D028): 확인 불가는 폐기 사유가 아니다
+        Cookie[] auth = loggedInCookies();
+        failSwitch.memberLookup = true;
+
+        MockHttpServletResponse response = mockMvc.perform(get("/api/v1/members/me").cookie(auth))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("COMMON_INTERNAL_ERROR"))
+                .andReturn().getResponse();
+
+        assertNoCookieChanges(response);
+        assertThat(response.getContentAsString(StandardCharsets.UTF_8)).doesNotContain("injected");
+        assertThat(redis.keys("auth:session:*")).hasSize(1);
+        failSwitch.memberLookup = false;
+        mockMvc.perform(get("/api/v1/members/me").cookie(auth)).andExpect(status().isOk());
     }
 
     @Test
@@ -412,6 +430,16 @@ class AuthStoreFailureIntegrationTest {
                 @Override
                 public int activatePending(long id, Instant createdAfter, Instant now) {
                     return real.activatePending(id, createdAfter, now);
+                }
+
+                @Override
+                public java.util.List<Member> findAllByIds(java.util.Collection<Long> ids) {
+                    return real.findAllByIds(ids);
+                }
+
+                @Override
+                public int updateNicknameOfActive(long id, String nickname, Instant now) {
+                    return real.updateNicknameOfActive(id, nickname, now);
                 }
             };
         }

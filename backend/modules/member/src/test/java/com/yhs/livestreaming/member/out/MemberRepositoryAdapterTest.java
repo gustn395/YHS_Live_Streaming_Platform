@@ -179,6 +179,45 @@ class MemberRepositoryAdapterTest {
                 disabled.getId())).isEqualTo("DISABLED");
     }
 
+    @Test
+    void findAllByIdsReturnsOnlyExistingMembers() { // MB-T058(MB-D029)
+        Member first = repository.save(local("tester01", "first@example.com"));
+        Member second = repository.save(Member.registerGoogle("google@example.com", "구글"));
+
+        assertThat(repository.findAllByIds(java.util.List.of(first.getId(), second.getId(), 999_999L, first.getId())))
+                .extracting(Member::getId).containsExactlyInAnyOrder(first.getId(), second.getId());
+        assertThat(repository.findAllByIds(java.util.List.of())).isEmpty();
+    }
+
+    @Test
+    void nicknameChangesOnlyForActiveMembers() { // MB-T057(MB-D028): 상태를 같은 UPDATE 조건으로 확인한다
+        java.time.Instant now = java.time.Instant.now();
+        Member active = repository.save(local("tester01", "active@example.com"));
+        Member pending = repository.save(local("tester02", "pending@example.com"));
+        Member disabled = repository.save(local("tester03", "disabled@example.com"));
+        jdbc.update("UPDATE members SET account_status = 'ACTIVE' WHERE id = ?", active.getId());
+        jdbc.update("UPDATE members SET account_status = 'DISABLED' WHERE id = ?", disabled.getId());
+        jdbc.update("UPDATE members SET updated_at = now() - INTERVAL '1 day'");
+        java.sql.Timestamp before = jdbc.queryForObject("SELECT updated_at FROM members WHERE id = ?",
+                java.sql.Timestamp.class, disabled.getId());
+
+        assertThat(repository.updateNicknameOfActive(active.getId(), "새 닉네임", now)).isEqualTo(1);
+        assertThat(repository.updateNicknameOfActive(pending.getId(), "새 닉네임", now)).isZero();
+        assertThat(repository.updateNicknameOfActive(disabled.getId(), "새 닉네임", now)).isZero();
+        assertThat(repository.updateNicknameOfActive(999_999L, "새 닉네임", now)).isZero();
+
+        assertThat(jdbc.queryForObject("SELECT nickname FROM members WHERE id = ?", String.class, active.getId()))
+                .isEqualTo("새 닉네임");
+        assertThat(jdbc.queryForObject("SELECT nickname FROM members WHERE id = ?", String.class, disabled.getId()))
+                .isEqualTo("닉네임");
+        // bulk UPDATE는 감사 기능을 거치지 않으므로 updated_at을 직접 넣는다: 바뀐 행만 갱신된다
+        assertThat(jdbc.queryForObject("SELECT updated_at FROM members WHERE id = ?", java.sql.Timestamp.class,
+                active.getId()).toInstant()).isCloseTo(now, org.assertj.core.api.Assertions.within(
+                        java.time.Duration.ofSeconds(1)));
+        assertThat(jdbc.queryForObject("SELECT updated_at FROM members WHERE id = ?", java.sql.Timestamp.class,
+                disabled.getId())).isEqualTo(before);
+    }
+
     private static Member local(String username, String email) {
         return Member.registerLocal(username, "pbkdf2-sha256$test-hash", email, "닉네임");
     }
