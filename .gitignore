@@ -25,6 +25,8 @@ replay_pid*
 
 # ===== Java / Spring (Gradle, Maven) =====
 .gradle/
+# Kotlin Gradle 플러그인 세션 데이터(build-logic의 Kotlin DSL 컴파일 등이 만든다)
+.kotlin/
 build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/gradle/wrapper/gradle-wrapper.jar
