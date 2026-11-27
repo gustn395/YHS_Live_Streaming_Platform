@@ -53,7 +53,7 @@ class OtpServiceTest {
 
     @Test
     void startStoresOnlyHmacWithFiveAndTenMinuteExpiriesAndMailsTheCode() {
-        LoginChallenge challenge = service.startForLogin(member);
+        LoginChallenge challenge = service.startForLogin(member, member.getEmail());
 
         NewOtpChallenge stored = store.issued.get(0);
         assertThat(stored.otpHmac()).isEqualTo(codes.hmac(stored.challengeId(), 1, "1234")).doesNotContain("1234");
@@ -91,7 +91,7 @@ class OtpServiceTest {
     void issueLimitIsTooManyRequestsWithoutMail() {
         store.next = new OtpStoreResult(Status.INTERVAL_LIMITED, 0, 0, Duration.ofSeconds(42));
 
-        assertThatThrownBy(() -> service.startForLogin(member))
+        assertThatThrownBy(() -> service.startForLogin(member, member.getEmail()))
                 .isInstanceOfSatisfying(TooManyRequestsException.class, ex -> {
                     assertThat(ex.errorCode()).isEqualTo(MemberErrorCode.OTP_RATE_LIMITED);
                     assertThat(ex.retryAfter()).isEqualTo(Duration.ofSeconds(42));
@@ -103,7 +103,7 @@ class OtpServiceTest {
     void loginMailFailureCompensatesThatVersionAndHidesDetails(CapturedOutput output) {
         mailFailure = new IllegalStateException("smtp said no to tester@example.com about 1234");
 
-        assertThat(failure(() -> service.startForLogin(member)).errorCode())
+        assertThat(failure(() -> service.startForLogin(member, member.getEmail())).errorCode())
                 .isEqualTo(MemberErrorCode.OTP_DELIVERY_UNAVAILABLE);
         assertThat(store.compensated).containsExactly(store.issued.get(0).challengeId() + "#1#LOGIN");
         assertThat(output).doesNotContain("tester@example.com").doesNotContain("1234").doesNotContain("smtp said");
@@ -113,7 +113,7 @@ class OtpServiceTest {
     void resendBumpsVersionCapsExpiryAtChallengeAndNeverRepeatsTheDeliveredCode() {
         String id = "challenge-x";
         store.snapshot = new OtpChallengeSnapshot(id, 42L, 1, "otp-key-1", NOW.plusSeconds(30),
-                NOW.plusSeconds(120), codes.digest(id, "1234"));
+                NOW.plusSeconds(120), codes.digest(id, "1234"), "tester@example.com");
 
         OtpResent resent = service.resend(id);
 
@@ -133,7 +133,7 @@ class OtpServiceTest {
     @Test
     void resendMailFailureInvalidatesOnlyTheNewVersion() {
         store.snapshot = new OtpChallengeSnapshot("c", 42L, 3, "otp-key-1", NOW.plusSeconds(30),
-                NOW.plusSeconds(500), "");
+                NOW.plusSeconds(500), "", "tester@example.com");
         mailFailure = new IllegalStateException("boom");
 
         assertThat(failure(() -> service.resend("c")).errorCode())
@@ -143,7 +143,7 @@ class OtpServiceTest {
 
     @Test
     void otpBecomesUsableOnlyAfterSmtpAcceptedTheMail() { // MB-D016
-        LoginChallenge challenge = service.startForLogin(member);
+        LoginChallenge challenge = service.startForLogin(member, member.getEmail());
 
         assertThat(confirmedAtSend).containsExactly(0); // SMTP 호출 동안 OTP는 확인 전 상태
         assertThat(store.confirmed).containsExactly(challenge.challengeId() + "#1"); // 발송이 끝난 뒤 확인
@@ -153,7 +153,7 @@ class OtpServiceTest {
     void failedDeliveryIsNeverConfirmed() {
         mailFailure = new IllegalStateException("timeout");
 
-        failure(() -> service.startForLogin(member));
+        failure(() -> service.startForLogin(member, member.getEmail()));
 
         assertThat(store.confirmed).isEmpty();
     }
@@ -162,7 +162,7 @@ class OtpServiceTest {
     void confirmationThatNoLongerMatchesIsTreatedAsDeliveryFailure() {
         store.confirmResult = false;
 
-        assertThat(failure(() -> service.startForLogin(member)).errorCode())
+        assertThat(failure(() -> service.startForLogin(member, member.getEmail())).errorCode())
                 .isEqualTo(MemberErrorCode.OTP_DELIVERY_UNAVAILABLE);
     }
 
@@ -172,7 +172,7 @@ class OtpServiceTest {
         randoms.clear();
         randoms.addAll(List.of(1234, 5678, 9012));
         store.snapshot = new OtpChallengeSnapshot(id, 42L, 2, "otp-key-1", NOW.plusSeconds(30),
-                NOW.plusSeconds(120), List.of(codes.digest(id, "5678"), codes.digest(id, "1234")));
+                NOW.plusSeconds(120), List.of(codes.digest(id, "5678"), codes.digest(id, "1234")), "tester@example.com");
 
         service.resend(id);
 
@@ -186,7 +186,7 @@ class OtpServiceTest {
         store.compensationFailure = new com.yhs.livestreaming.global.auth.LoginSessionStoreUnavailableException(
                 "redis down", null);
 
-        assertThat(failure(() -> service.startForLogin(member)).errorCode())
+        assertThat(failure(() -> service.startForLogin(member, member.getEmail())).errorCode())
                 .isEqualTo(MemberErrorCode.OTP_DELIVERY_UNAVAILABLE);
         assertThat(output).contains("compensated=false");
     }
@@ -194,7 +194,7 @@ class OtpServiceTest {
     @Test
     void racingResendWaitsForTheConfiguredInterval() {
         store.snapshot = new OtpChallengeSnapshot("c", 42L, 1, "otp-key-1", NOW.plusSeconds(30),
-                NOW.plusSeconds(500), "");
+                NOW.plusSeconds(500), "", "tester@example.com");
         store.next = OtpStoreResult.of(Status.VERSION_CONFLICT);
 
         assertThatThrownBy(() -> service.resend("c"))
@@ -205,17 +205,17 @@ class OtpServiceTest {
     @Test
     void verifyComputesHmacWithTheCurrentVersionAndReturnsMember() {
         store.snapshot = new OtpChallengeSnapshot("c", 42L, 2, "otp-key-1", NOW.plusSeconds(30),
-                NOW.plusSeconds(500), "");
+                NOW.plusSeconds(500), "", "tester@example.com");
         store.next = new OtpStoreResult(Status.OK, 2, 42L, Duration.ZERO);
 
-        assertThat(service.verify("c", "0420")).isEqualTo(42L);
+        assertThat(service.verify("c", "0420")).isEqualTo(new VerifiedOtp(42L, "tester@example.com"));
         assertThat(store.verified).containsExactly(codes.hmac("c", 2, "0420"));
     }
 
     @Test
     void verifyOutcomesMapToDistinctCodes() {
         store.snapshot = new OtpChallengeSnapshot("c", 42L, 1, "otp-key-1", NOW.plusSeconds(30),
-                NOW.plusSeconds(500), "");
+                NOW.plusSeconds(500), "", "tester@example.com");
         assertThat(verifyError(Status.MISMATCH)).isEqualTo(MemberErrorCode.OTP_MISMATCH);
         assertThat(verifyError(Status.EXPIRED)).isEqualTo(MemberErrorCode.OTP_EXPIRED);
         assertThat(verifyError(Status.EXHAUSTED)).isEqualTo(MemberErrorCode.OTP_EXPIRED);
@@ -227,7 +227,7 @@ class OtpServiceTest {
     @Test
     void exhaustedAndTimeExpiredHaveDifferentGuidance() {
         store.snapshot = new OtpChallengeSnapshot("c", 42L, 1, "otp-key-1", NOW.plusSeconds(30),
-                NOW.plusSeconds(500), "");
+                NOW.plusSeconds(500), "", "tester@example.com");
         store.next = OtpStoreResult.of(Status.EXHAUSTED);
         String exhausted = failure(() -> service.verify("c", "0000")).getMessage();
         store.next = OtpStoreResult.of(Status.EXPIRED);
@@ -261,6 +261,38 @@ class OtpServiceTest {
         Member member = Member.registerLocal("tester01", "hash", "tester@example.com", "테스터");
         ReflectionTestUtils.setField(member, "id", 42L);
         return member;
+    }
+
+    @Test
+    void startMailsAndBindsTheGivenDeliveryEmail() { // MB-T053, MB-D025
+        service.startForLogin(member, "google-now@example.com");
+
+        assertThat(sent.get(0)[0]).isEqualTo("google-now@example.com");
+        assertThat(store.issued.get(0).deliveryEmail()).isEqualTo("google-now@example.com");
+    }
+
+    @Test
+    void resendMailsTheChallengeDeliveryEmailNotTheMemberEmail() { // MB-T053
+        String id = "challenge-x";
+        store.snapshot = new OtpChallengeSnapshot(id, 42L, 1, "otp-key-1", NOW.plusSeconds(30),
+                NOW.plusSeconds(120), codes.digest(id, "1234"), "bound@example.com");
+
+        service.resend(id);
+
+        assertThat(sent.get(0)[0]).isEqualTo("bound@example.com");
+    }
+
+    @Test
+    void legacyChallengeWithoutDeliveryEmailIsInvalidForResendAndVerify() { // MB-T053: 배포 전 Challenge 무효 처리
+        store.snapshot = new OtpChallengeSnapshot("c", 42L, 1, "otp-key-1", NOW.plusSeconds(30),
+                NOW.plusSeconds(500), "", null);
+        store.next = new OtpStoreResult(Status.OK, 1, 42L, Duration.ZERO);
+
+        assertThat(failure(() -> service.resend("c")).errorCode()).isEqualTo(MemberErrorCode.OTP_CHALLENGE_INVALID);
+        assertThat(failure(() -> service.verify("c", "1234")).errorCode())
+                .isEqualTo(MemberErrorCode.OTP_CHALLENGE_INVALID);
+        assertThat(sent).isEmpty();
+        assertThat(store.verified).isEmpty();
     }
 
     private static final class FakeStore implements OtpChallengeStore {

@@ -37,6 +37,8 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-postgresql")
     // Redis(로그인 세션·OTP·요청 제한) 통합 테스트: Testcontainers GenericContainer + 테스트 정리용 StringRedisTemplate
     testImplementation("org.springframework.boot:spring-boot-starter-data-redis")
+    // 가짜 OIDC 공급자의 ID Token 서명(테스트 전용, MB-D023). Nimbus는 이 모듈을 통해 BOM이 정한 버전으로 들어온다
+    testImplementation("org.springframework.security:spring-security-oauth2-jose")
 
     // 외부 Tomcat에 배포할 때 컨테이너가 제공하는 런타임은 plain WAR에서 빠지도록 providedRuntime으로 둔다.
     // (실행 가능한 WAR에는 WEB-INF/lib-provided로 포함되어 java -jar 실행이 된다)

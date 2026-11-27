@@ -6,5 +6,8 @@ import com.yhs.livestreaming.member.domain.Member;
 @FunctionalInterface
 public interface OtpChallengeStarter {
 
-    LoginChallenge startForLogin(Member member);
+    /**
+     * @param deliveryEmail OTP를 보낼 주소. Challenge에 묶여 재발송도 이 주소로 간다(MB-D025)
+     */
+    LoginChallenge startForLogin(Member member, String deliveryEmail);
 }

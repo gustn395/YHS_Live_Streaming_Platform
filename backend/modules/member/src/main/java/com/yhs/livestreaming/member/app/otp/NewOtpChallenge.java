@@ -14,11 +14,12 @@ import java.time.Instant;
  * @param challengeExpiresAt Challenge 절대 만료(발급 + 10분)
  */
 public record NewOtpChallenge(String challengeId, long memberId, String otpHmac, String codeDigest, String keyId,
-                              Instant otpExpiresAt, Instant challengeExpiresAt) {
+                              Instant otpExpiresAt, Instant challengeExpiresAt, String deliveryEmail) {
 
     @Override
     public String toString() {
         return "NewOtpChallenge[challengeId=****, memberId=" + memberId + ", otpHmac=****, codeDigest=****, keyId="
-                + keyId + ", otpExpiresAt=" + otpExpiresAt + ", challengeExpiresAt=" + challengeExpiresAt + "]";
+                + keyId + ", otpExpiresAt=" + otpExpiresAt + ", challengeExpiresAt=" + challengeExpiresAt
+                + ", deliveryEmail=****]";
     }
 }

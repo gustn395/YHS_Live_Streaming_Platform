@@ -12,6 +12,11 @@ public final class MemberAuthCookies {
     public static final String REFRESH_TOKEN_PATH = "/api/v1/auth";
     /** OTP Challenge(불투명 난수). Path=/, 보호 API 인증에는 쓰지 않는다. */
     public static final String OTP_CHALLENGE = "__Host-yhs_otp";
+    /**
+     * Google 왕복 동안 브라우저를 OAuth 임시 인증 상태에 묶는 불투명 난수(MB-D024). Google에서 돌아오는 교차 사이트 최상위 GET에
+     * 실리도록 이 쿠키만 SameSite=Lax다(MB-D013의 예외). Path=/, Max-Age 10분.
+     */
+    public static final String OAUTH_STATE = "__Host-yhs_oauth";
 
     private MemberAuthCookies() {
     }

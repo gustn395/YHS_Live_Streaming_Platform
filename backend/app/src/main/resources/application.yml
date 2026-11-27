@@ -47,6 +47,15 @@ logging:
 # - OTP HMAC: MEMBER_OTP_HMAC_KEY(Base64 256bit)·MEMBER_OTP_HMAC_KEY_ID (MB-D015)
 # - OTP 메일 발신 주소: MEMBER_OTP_MAIL_FROM (MB-D016)
 # 요청·로그인·OTP 제한 수치는 member.limits.*로 바꿀 수 있고 기본값이 정책 값이다(MB-D017, MB-D018).
+# - Google OIDC 로그인(MB-D023·D024): GOOGLE_CLIENT_ID·GOOGLE_CLIENT_SECRET·MEMBER_OAUTH_PUBLIC_BASE_URL(경로 없는 https 출처,
+#   http는 localhost·127.0.0.1·[::1]만). 없거나 비어 있으면 기동에 실패한다. Redirect URI는 {MEMBER_OAUTH_PUBLIC_BASE_URL}/api/v1/auth/oauth2/code/google이다.
+
+member:
+  oauth:
+    public-base-url: ${MEMBER_OAUTH_PUBLIC_BASE_URL}
+    google:
+      client-id: ${GOOGLE_CLIENT_ID}
+      client-secret: ${GOOGLE_CLIENT_SECRET}
 
 server:
   port: ${BACKEND_PORT:8080}

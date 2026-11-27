@@ -8,7 +8,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * 비밀 값이 아니므로 기본값을 둔다.
  */
 @ConfigurationProperties("member.limits")
-public record MemberLimitProperties(Window signup, Window login, Window otp, Window refresh,
+public record MemberLimitProperties(Window signup, Window login, Window otp, Window refresh, Window oauthStart,
                                     LoginFailure loginFailure, OtpIssue otpIssue) {
 
     public MemberLimitProperties {
@@ -17,6 +17,7 @@ public record MemberLimitProperties(Window signup, Window login, Window otp, Win
         login = withDefaults(login, new Window(30, Duration.ofMinutes(10)));
         otp = withDefaults(otp, new Window(30, Duration.ofMinutes(10)));
         refresh = withDefaults(refresh, new Window(120, Duration.ofMinutes(10))); // MB-D020
+        oauthStart = withDefaults(oauthStart, new Window(30, Duration.ofMinutes(10))); // MB-D024
         loginFailure = loginFailure != null ? loginFailure
                 : new LoginFailure(10, Duration.ofHours(24), Duration.ofMinutes(15));
         otpIssue = otpIssue != null ? otpIssue : new OtpIssue(Duration.ofSeconds(60), 5, 20, 10, 5);
@@ -36,7 +37,7 @@ public record MemberLimitProperties(Window signup, Window login, Window otp, Win
     }
 
     public static MemberLimitProperties defaults() {
-        return new MemberLimitProperties(null, null, null, null, null, null);
+        return new MemberLimitProperties(null, null, null, null, null, null, null);
     }
 
     public Window window(RateLimitScope scope) {
@@ -45,6 +46,7 @@ public record MemberLimitProperties(Window signup, Window login, Window otp, Win
             case LOGIN -> login;
             case OTP -> otp;
             case REFRESH -> refresh;
+            case OAUTH_START -> oauthStart;
         };
     }
 

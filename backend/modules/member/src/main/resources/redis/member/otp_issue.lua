@@ -9,6 +9,7 @@
 -- ARGV[7] = 발급 간격(ms), ARGV[8] = 시간당 최대, ARGV[9] = 24시간 최대, ARGV[10] = 24시간 실패 최대
 -- ARGV[11] = 1시간(ms), ARGV[12] = 24시간(ms), ARGV[13] = Challenge 키 접두사
 -- ARGV[14] = 숫자 지문(보낼 4자리의 HMAC, 재발송 때 같은 숫자 방지용)
+-- ARGV[15] = OTP 수신 주소(재발송도 이 주소로 보낸다, MB-D025)
 -- 새 OTP는 confirmed=0: 메일 발송 성공이 확인되기 전(otp_confirm_delivered.lua)에는 검증할 수 없다.
 -- 반환: {1, version} 발급 / {-1, ms} 간격 / {-2, ms} 발급 수 / {-3, ms} 실패 합산 / {-9, 0} 새 키 충돌
 -- 모든 검사를 쓰기 전에 끝낸다. 이전 Challenge 키는 현재 포인터에서 읽어 지운다(단일 Redis 전제).
@@ -51,7 +52,7 @@ if previous then
 end
 redis.call('HSET', KEYS[6], 'memberId', ARGV[2], 'version', '1', 'otpHmac', ARGV[3], 'keyId', ARGV[4],
         'attempts', '0', 'otpExpiresAt', ARGV[5], 'challengeExpiresAt', ARGV[6], 'confirmed', '0',
-        'sentDigest', ARGV[14], 'prevSentDigest', '')
+        'sentDigest', ARGV[14], 'prevSentDigest', '', 'deliveryEmail', ARGV[15])
 redis.call('PEXPIREAT', KEYS[6], ARGV[6])
 redis.call('SET', KEYS[1], ARGV[1], 'PXAT', ARGV[6])
 return {1, 1}

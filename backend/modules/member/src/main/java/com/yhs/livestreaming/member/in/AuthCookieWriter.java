@@ -10,7 +10,7 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
 
 /**
- * 인증 쿠키 발급·삭제(MB-D013). 모든 쿠키는 HttpOnly·Secure·SameSite=Strict이고 Domain을 지정하지 않는다. 삭제는 발급과 같은
+ * 인증 쿠키 발급·삭제(MB-D013). 모든 쿠키는 HttpOnly·Secure·SameSite=Strict(OAuth 임시 상태 쿠키만 Lax, MB-D024)이고 Domain을 지정하지 않는다. 삭제는 발급과 같은
  * 이름·Path·속성에 Max-Age=0으로 한다. Max-Age는 만료 시각까지 남은 초를 올림한 값이다(절대 만료를 늘리지 않는다).
  */
 @Component
@@ -56,11 +56,25 @@ public class AuthCookieWriter {
         return Duration.ofSeconds((millis + 999) / 1000);
     }
 
+    /** OAuth 임시 인증 상태 쿠키(MB-D024): Lax 예외, 10분. */
+    public void writeOAuthState(HttpServletResponse response, String id, Duration maxAge) {
+        add(response, MemberAuthCookies.OAUTH_STATE, id, "/", maxAge, "Lax");
+    }
+
+    public void clearOAuthState(HttpServletResponse response) {
+        add(response, MemberAuthCookies.OAUTH_STATE, "", "/", Duration.ZERO, "Lax");
+    }
+
     private static void add(HttpServletResponse response, String name, String value, String path, Duration maxAge) {
+        add(response, name, value, path, maxAge, "Strict");
+    }
+
+    private static void add(HttpServletResponse response, String name, String value, String path, Duration maxAge,
+                            String sameSite) {
         ResponseCookie cookie = ResponseCookie.from(name, value)
                 .httpOnly(true)
                 .secure(true)
-                .sameSite("Strict")
+                .sameSite(sameSite)
                 .path(path)
                 .maxAge(maxAge)
                 .build();

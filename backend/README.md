@@ -79,6 +79,8 @@ main 대상 PR, main push, 수동 실행(`workflow_dispatch`) 때 [`.github/work
 | `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` | 없음 | OTP 메일 SMTP. 개발은 Mailpit(`localhost:1025`, 계정 없음), 운영은 Gmail SMTP(`smtp.gmail.com:587`, 앱 비밀번호). 호스트가 없으면 기동 실패 |
 | `MEMBER_SMTP_AUTH`, `MEMBER_SMTP_STARTTLS` | 없음(필수) | SMTP 인증·STARTTLS. 개발(Mailpit) `false`, 운영(Gmail) **반드시 `true`**. `STARTTLS=true`면 TLS를 강제한다(`starttls.required`) |
 | `MEMBER_SMTP_CONNECT_TIMEOUT_MS`, `MEMBER_SMTP_READ_TIMEOUT_MS`, `MEMBER_SMTP_WRITE_TIMEOUT_MS` | `3000`, `5000`, `5000` | SMTP 타임아웃(ms). 자동 재시도 없음 |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | 없음 | Google OIDC 로그인 클라이언트(Google Cloud Console의 웹 애플리케이션). 비어 있으면 기동 실패. 테스트·CI는 실제 값을 쓰지 않는다([MB-D023](../docs/member/decisions.md#1-확정-결정)) |
+| `MEMBER_OAUTH_PUBLIC_BASE_URL` | 없음 | 브라우저가 보는 서비스 출처(경로 없는 `https://호스트[:포트]`, `http`는 `localhost`·`127.0.0.1`·`[::1]`만: `__Host-` 쿠키가 Secure라서). Google 콘솔의 승인된 Redirect URI는 `{이 값}/api/v1/auth/oauth2/code/google`이다. 비었거나 형식이 틀리면 기동 실패([MB-D024](../docs/member/decisions.md#1-확정-결정)) |
 
 요청·로그인·OTP 제한 수치는 `member.limits.*` 설정으로 바꿀 수 있고 기본값이 정책 값이다([MB-D017](../docs/member/decisions.md#1-확정-결정), [MB-D018](../docs/member/decisions.md#1-확정-결정)). 요청 제한의 클라이언트 IP는 `getRemoteAddr()`만 쓴다. 리버스 프록시 뒤에 두면 모든 요청이 프록시 IP로 묶이므로 외부 공개 전에 [MB-U06](../docs/member/decisions.md#2-미결)을 정해야 한다.
 
@@ -159,7 +161,7 @@ backend/
 
 ## 6. 의존성 도입 계획 (Q3)
 
-지금은 `spring-boot-starter-webmvc`, `spring-boot-starter-actuator`, `spring-boot-starter-tomcat-runtime`(providedRuntime), `spring-boot-starter-test`와 global 모듈의 `spring-boot-starter-security`·`-validation`·`-data-jpa`·springdoc·`spring-security-oauth2-jose`, member 모듈의 `spring-boot-starter-data-redis`·`-mail`, app의 `spring-boot-starter-flyway`·PostgreSQL 드라이버·`flyway-database-postgresql`, 테스트용 `spring-boot-starter-webmvc-test`(app)·`spring-boot-starter-security-test`(app, global)·`spring-boot-starter-data-jpa-test`(member)·`spring-boot-testcontainers`와 Testcontainers PostgreSQL(app, member)·`spring-boot-starter-data-redis-test`(member)·Redis 테스트용 `spring-boot-starter-data-redis`(app)가 있다. 나머지는 아래 시점에 추가한다. 실행·테스트 클래스패스를 해석할 때 Boot·Framework 모듈 버전이 섞이면 실패한다([G-D012](../docs/policy.md#3-공통-결정-이력)). 이 검사는 IDE의 Gradle 동기화에도 똑같이 걸리므로, 동기화가 "Spring 버전 불일치"로 실패하면 메시지에 나온 의존성을 확인한다. 버전은 Spring Boot 4.1.3 BOM 기준이며, BOM이 관리하지 않는 것만 `gradle/libs.versions.toml`에 고정한다.
+지금은 `spring-boot-starter-webmvc`, `spring-boot-starter-actuator`, `spring-boot-starter-tomcat-runtime`(providedRuntime), `spring-boot-starter-test`와 global 모듈의 `spring-boot-starter-security`·`-validation`·`-data-jpa`·springdoc·`spring-security-oauth2-jose`, member 모듈의 `spring-boot-starter-data-redis`·`-mail`·`-security-oauth2-client`, app의 `spring-boot-starter-flyway`·PostgreSQL 드라이버·`flyway-database-postgresql`, 테스트용 `spring-boot-starter-webmvc-test`(app)·`spring-boot-starter-security-test`(app, global)·`spring-boot-starter-data-jpa-test`(member)·`spring-boot-testcontainers`와 Testcontainers PostgreSQL(app, member)·`spring-boot-starter-data-redis-test`(member)·Redis 테스트용 `spring-boot-starter-data-redis`(app)·가짜 OIDC 공급자 서명용 `spring-security-oauth2-jose`(app 테스트)가 있다. 나머지는 아래 시점에 추가한다. 실행·테스트 클래스패스를 해석할 때 Boot·Framework 모듈 버전이 섞이면 실패한다([G-D012](../docs/policy.md#3-공통-결정-이력)). 이 검사는 IDE의 Gradle 동기화에도 똑같이 걸리므로, 동기화가 "Spring 버전 불일치"로 실패하면 메시지에 나온 의존성을 확인한다. 버전은 Spring Boot 4.1.3 BOM 기준이며, BOM이 관리하지 않는 것만 `gradle/libs.versions.toml`에 고정한다.
 
 | 기술 | 도입 시점 | 버전 (4.1.3 기준) | 주의 |
 | --- | --- | --- | --- |
@@ -169,6 +171,7 @@ backend/
 | Redis | 세션·OTP (BE-03, 도입함: member `spring-boot-starter-data-redis`) | Lettuce 7.5.2 (BOM) | 테스트는 Testcontainers `redis:7.4-alpine`. 원자 처리는 Lua 스크립트(`member/src/main/resources/redis/member`) |
 | Spring Security JOSE(Nimbus) | Access Token JWT (BE-03, 도입함: global `spring-security-oauth2-jose`) | Security 7.1.3 / nimbus-jose-jwt 10.9.1 (BOM) | resource-server 스타터는 쓰지 않는다(쿠키 인증 필터를 직접 둔다, [MB-D012](../docs/member/decisions.md#1-확정-결정)) |
 | Spring Mail | OTP 메일 (BE-03, 도입함: member `spring-boot-starter-mail`) | Angus Mail 2.0.5 (BOM) | 테스트는 대역 + Mailpit 컨테이너(`axllent/mailpit:v1.21.0`) |
+| Spring Security OAuth2 Client | Google OIDC 로그인 (BE-05, 도입함: member `spring-boot-starter-security-oauth2-client`) | Security 7.1 (BOM) | Boot 4 스타터 이름이다. 코드는 `oauth2Login`·`AuthorizationRequestRepository` 등 Security 6.5 호환 API만 쓴다. 테스트는 JDK HttpServer 가짜 OIDC 공급자(app 테스트 의존 `spring-security-oauth2-jose`로 서명) |
 | springdoc OpenAPI | global 공통 기반 (Issue #8) | 3.1.1 (Boot 4.1.0으로 빌드된 릴리스) — BOM 미관리, `libs.versions.toml` | Boot 3용 2.x, Boot 4.2용 3.2.x는 쓸 수 없다(4.2.x 모듈을 끌어와 버전이 섞인다). 운영 기본 비활성([G-D008](../docs/policy.md#3-공통-결정-이력), [G-D012](../docs/policy.md#3-공통-결정-이력)) |
 | JSP / JSTL | 관리자 화면 | Jasper 11.0.27, JSTL API 3.0.2, 구현체 3.0.1 (BOM) | 7장 확인 결과 참고 |
 | WebSocket / STOMP | Chat | `spring-boot-starter-websocket` (BOM) | |

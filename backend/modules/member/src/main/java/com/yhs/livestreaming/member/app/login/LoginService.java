@@ -87,7 +87,7 @@ public class LoginService {
         });
 
         rehashIfNeeded(member, rawPassword, now);
-        return otp.startForLogin(member);
+        return otp.startForLogin(member, member.getEmail());
     }
 
     /** MB-D006 세부: 비밀번호 일치·로그인 가능 상태 확인 뒤, 기존 해시를 조건으로 바꾼다. 실패해도 로그인은 계속한다. */

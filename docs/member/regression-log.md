@@ -58,5 +58,20 @@
 | 2026-11-27 | (S6 재리뷰 반영) `.\gradlew.bat :modules:member:test --tests "*RefreshServiceTest"` (발급 순간 만료·다른 발급 거부 테스트 2건, test-after) | 성공. 15건 통과. 변이 확인: catch 분기를 끄면 `issuerRejectingBecauseTheSessionJustEndedIsRefreshInvalid` 실패, 되돌린 뒤 통과 | 변이 표시(`[MUTATION-tmp]`) 0건 확인 |
 | 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (S5) | 성공(exit 0). global 54, member 206, app 100 통과 | |
 | 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (Phase 5 S10 뒤 최종 S5) + `:app:build` | 성공(exit 0). global 54, member 206, app 100 통과, build exit 0(WAR 2개) | MB-D020 서술 보완(Q1=a) 반영 뒤 |
+| 2026-11-27 | (#21 BE-05 단계 A) `.\gradlew.bat :modules:member:compileTestJava` (OTP 수신 주소 테스트 먼저) | 컴파일 실패(의도) | `startForLogin(member, email)`·`VerifiedOtp`·`deliveryEmail` 없음 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*OtpServiceTest" --tests "*RedisOtpChallengeStoreTest" --tests "*LoginServiceTest" --tests "*LoginCompletionServiceTest"` (구현 후) | 성공 | |
+| 2026-11-27 | (단계 B) `:modules:member:compileTestJava` → `:modules:member:test --tests "*GoogleAccountRepositoryAdapterTest" --tests "*MemberRepositoryAdapterTest"` | 컴파일 실패(의도) → 성공(11건, PostgreSQL 동시 가입·재생성·활성화 경합 포함) | |
+| 2026-11-27 | (단계 C) `:modules:member:compileTestJava` → `:modules:member:test` | 컴파일 실패(의도) → 성공(member 240건) | |
+| 2026-11-27 | (단계 D) `:modules:member:compileTestJava` | 컴파일 실패(의도) | `RedisOAuthStateStore`·`MemberOAuthProperties`·`OAUTH_START` 없음 |
+| 2026-11-27 | `:modules:member:test` (구현 후) | 성공(member 252건) | |
+| 2026-11-27 | `:app:test --tests "*GoogleOAuthLoginIntegrationTest"` | 1차 컴파일 실패(nimbus-jose-jwt 버전 미관리 → `spring-security-oauth2-jose` 테스트 의존으로 바꿈), 2차 28건 중 18 실패(의도 아님) | S4: 콜백 URL을 문자열로 넘겨 MockMvc가 state의 `%3D`를 다시 인코딩(테스트 구성 문제, 제품 결함 아님) → 파라미터로 전달 |
+| 2026-11-27 | 같은 명령 (테스트 수정 후) | 성공(28건) | |
+| 2026-11-27 | `.\gradlew.bat :modules:global:test :modules:member:test :app:test --continue` | 성공(exit 0). global 54, member 252, app 128 통과 | 기존 LOCAL·Refresh·로그아웃 회귀 포함 |
+| 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (#21 S5) | 성공(exit 0). global 54, member 252, app 128 통과 | |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*MemberOAuthPropertiesTest" --tests "*GoogleLoginFailureHandlerTest" --tests "*OAuthCookieAuthorizationRequestRepositoryTest" --tests "*GoogleAccountRepositoryAdapterTest"` (#21 S6 반영 RED) | 실패(의도). 새 테스트 4건 실패: loopback 밖 http 허용, 형식 틀린 쿠키로 저장소 조회, 연결 행 없이 활성화 1행, 콜백 error 원문 로그 | S6 지적 반영 전 |
+| 2026-11-27 | 같은 명령 (#21 S6 반영 GREEN) | 성공(exit 0) | |
+| 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (#21 S6 반영 뒤 S5) | 성공(exit 0). global 54, member 257, app 128 통과 | app `application.yml` 환경변수 빈 기본값 제거 포함 |
+| 2026-11-27 | `.\gradlew.bat :app:build` (#21 Commit 직전) | 성공(exit 0). WAR 2개 생성 | 테스트는 직전 실행 결과 재사용(증분) |
+| 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (#21 S10·S7 뒤 최종 S5) + `:app:build` | 성공(exit 0). global 54, member 257, app 128 통과, build exit 0 | 코드 변경 없음(S10 0건) |
 
 - 미실행: 로컬 전체 `./gradlew clean build`(빌드 정책상 실행하지 않음).

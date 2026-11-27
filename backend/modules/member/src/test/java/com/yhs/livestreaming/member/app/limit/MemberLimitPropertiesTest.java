@@ -71,6 +71,15 @@ class MemberLimitPropertiesTest {
     }
 
     @Test
+    void oauthStartDefaultsToThirtyPerTenMinutes() { // MB-T052, MB-D024
+        runner.run(context -> assertThat(context.getBean(MemberLimitProperties.class).window(RateLimitScope.OAUTH_START))
+                .isEqualTo(new MemberLimitProperties.Window(30, Duration.ofMinutes(10))));
+        runner.withPropertyValues("member.limits.oauth-start.max=5")
+                .run(context -> assertThat(context.getBean(MemberLimitProperties.class).oauthStart())
+                        .isEqualTo(new MemberLimitProperties.Window(5, Duration.ofMinutes(10))));
+    }
+
+    @Test
     void maxBelowOneFailsStartup() {
         runner.withPropertyValues("member.limits.login.max=0")
                 .run(context -> assertThat(context).hasFailed());

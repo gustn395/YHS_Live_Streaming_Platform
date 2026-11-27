@@ -36,10 +36,12 @@ class LoginServiceTest {
     private final LoginFakes.Hasher hasher = new LoginFakes.Hasher();
     private final LoginFakes.Attempts attempts = new LoginFakes.Attempts();
     private final List<Long> otpStartedFor = new ArrayList<>();
+    private final List<String> otpEmails = new ArrayList<>();
     private final DummyPasswordHash dummy = new DummyPasswordHash(hasher, "pw:dummy");
     private final LoginService service = new LoginService(members, hasher, dummy, attempts,
-            member -> {
+            (member, deliveryEmail) -> {
                 otpStartedFor.add(member.getId());
+                otpEmails.add(deliveryEmail);
                 return new LoginChallenge("challenge", NOW.plusSeconds(300), NOW.plusSeconds(600));
             },
             Clock.fixed(NOW, ZoneOffset.UTC));
@@ -53,6 +55,7 @@ class LoginServiceTest {
         assertThat(challenge.challengeId()).isEqualTo("challenge");
         assertThat(otpStartedFor).containsExactly(1L);
         assertThat(attempts.successes).containsExactly("tester01");
+        assertThat(otpEmails).containsExactly("tester01@example.com"); // LOCAL은 회원 이메일로 보낸다(MB-T053)
     }
 
     @Test

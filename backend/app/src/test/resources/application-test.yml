@@ -13,6 +13,16 @@ member:
     hmac-key-id: test-otp-1
     mail:
       from: no-reply@example.com
+  oauth:
+    # 테스트는 실제 Google을 부르지 않는다(MB-D023). 기본은 닿지 않는 주소이고, Google 통합 테스트만 가짜 OIDC 공급자로 바꾼다.
+    public-base-url: https://app.test
+    google:
+      client-id: test-google-client
+      client-secret: test-google-secret
+      authorization-uri: http://127.0.0.1:9/authorize
+      token-uri: http://127.0.0.1:9/token
+      jwk-set-uri: http://127.0.0.1:9/jwks
+      issuer-uri: http://127.0.0.1:9
 spring:
   # 통합 테스트는 메일 대역(CapturingOtpMailSender)을 쓴다. 실수로 실제 어댑터가 불려도 닿지 않는 주소다.
   mail:

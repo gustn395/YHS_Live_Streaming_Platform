@@ -28,6 +28,7 @@
 - Access Token은 HS256 JWT(15분), Refresh Token은 256비트 난수(7일 절대 만료, 해시만 저장)이고 HttpOnly·Secure·SameSite=Strict 쿠키로 전달한다([MB-D012](member/decisions.md#1-확정-결정)~[MB-D014](member/decisions.md#1-확정-결정)).
 - OTP 메일은 SMTP로 동기 발송하고 실패하면 503이다([MB-D016](member/decisions.md#1-확정-결정)).
 - 로그인 실패·회원 단위 OTP·IP 기준 요청 수를 제한하고(429), Redis를 쓸 수 없으면 인증 관련 요청을 503으로 거부한다([MB-D017](member/decisions.md#1-확정-결정)~[MB-D019](member/decisions.md#1-확정-결정)).
+- Google 로그인은 OIDC 인증을 1차 인증으로만 쓰고 LOCAL과 같이 이메일 OTP를 거친다. 처음 로그인하면 PENDING GOOGLE 회원으로 자동 가입하며 LOCAL 계정과 병합하지 않는다([MB-D023](member/decisions.md#1-확정-결정)~[MB-D025](member/decisions.md#1-확정-결정)).
 
 ## 3. 공통 결정 이력
 

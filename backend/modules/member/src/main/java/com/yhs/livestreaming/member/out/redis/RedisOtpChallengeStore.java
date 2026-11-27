@@ -60,7 +60,7 @@ public class RedisOtpChallengeStore implements OtpChallengeStore {
                 millis(c.challengeExpiresAt()), Long.toString(limits.interval().toMillis()),
                 Integer.toString(limits.hourlyMax()), Integer.toString(limits.dailyMax()),
                 Integer.toString(limits.dailyFailureMax()), HOUR, DAY, RedisKeys.OTP_CHALLENGE_PREFIX,
-                c.codeDigest()));
+                c.codeDigest(), c.deliveryEmail()));
         long code = number(result, 0);
         long value = number(result, 1);
         if (code == 1) {
@@ -77,8 +77,9 @@ public class RedisOtpChallengeStore implements OtpChallengeStore {
     public Optional<OtpChallengeSnapshot> find(String challengeId) {
         List<Object> values = run(() -> redis.opsForHash().multiGet(RedisKeys.otpChallenge(challengeId),
                 List.of("memberId", "version", "keyId", "otpExpiresAt", "challengeExpiresAt", "sentDigest",
-                        "prevSentDigest")));
-        if (values == null || values.get(0) == null) {
+                        "prevSentDigest", "deliveryEmail")));
+        // 수신 주소가 없는 Challenge는 이 필드가 생기기 전에 만든 것이다: 찾지 못한 것으로 보고 다시 로그인하게 한다
+        if (values == null || values.get(0) == null || values.get(7) == null || ((String) values.get(7)).isEmpty()) {
             return Optional.empty();
         }
         long memberId = Long.parseLong((String) values.get(0));
@@ -89,7 +90,8 @@ public class RedisOtpChallengeStore implements OtpChallengeStore {
         }
         return Optional.of(new OtpChallengeSnapshot(challengeId, memberId, Integer.parseInt((String) values.get(1)),
                 (String) values.get(2), Instant.ofEpochMilli(Long.parseLong((String) values.get(3))),
-                challengeExpiresAt, java.util.Arrays.asList((String) values.get(5), (String) values.get(6))));
+                challengeExpiresAt, java.util.Arrays.asList((String) values.get(5), (String) values.get(6)),
+                (String) values.get(7)));
     }
 
     @Override
