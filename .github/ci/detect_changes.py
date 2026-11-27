@@ -1,7 +1,8 @@
-"""Backend·Frontend CI 공통 변경 감지 (Python 3 표준 라이브러리만 사용).
+"""Backend·Frontend·E2E CI 공통 변경 감지 (Python 3 표준 라이브러리만 사용).
 
-정책 원본: docs/testing/fe02-ci-split.md (1장 Q1~Q3·Q6·Q7, 2~3장).
-- 분류 규칙은 이 파일 한 곳에만 둔다. 두 Workflow가 같은 결과를 각자 읽는다.
+정책 원본: docs/testing/fe02-ci-split.md (1장 Q1~Q3·Q6·Q7, 2~3장), E2E 영역은 docs/testing/fe06-e2e-ci.md (Q2·3장).
+- 분류 규칙은 이 파일 한 곳에만 둔다. 세 Workflow(backend·frontend·e2e)가 같은 결과를 각자 읽는다.
+- e2e는 backend·frontend 중 하나라도 실행하거나 E2E 전용 경로가 바뀌면 실행한다.
 - 입력은 환경변수로만 받는다(EVENT_NAME·BASE_SHA·HEAD_SHA). PR에서 온 값을 셸에 넣지 않는다.
 - 출력은 고정 토큰만 쓴다. 파일 경로는 Job 로그에 repr로만 남기고 Step Summary에는 넣지 않는다.
 """
@@ -19,9 +20,11 @@ SHA_RE = re.compile(r"[0-9a-f]{40}")
 _EXACT = {
     ".github/workflows/backend-ci.yml": "backend",
     ".github/workflows/frontend-ci.yml": "frontend",
+    ".github/workflows/e2e-ci.yml": "e2e",
 }
 _PREFIX = [
     (".github/", "both"),
+    ("infrastructure/docker/e2e/", "e2e"),
     ("backend/", "backend"),
     ("frontend/", "frontend"),
     ("docs/api/", "both"),
@@ -31,7 +34,7 @@ _ROOT_SHARED = {".gitignore", ".env.example", ".coderabbit.yaml"}
 
 
 def classify(path):
-    """경로 하나를 backend·frontend·both·none 중 하나로 분류한다."""
+    """경로 하나를 backend·frontend·e2e·both·none 중 하나로 분류한다."""
     if path in _EXACT:
         return _EXACT[path]
     for prefix, area in _PREFIX:
@@ -53,6 +56,7 @@ def split_z(data):
 class Result:
     backend: str
     frontend: str
+    e2e: str
     mode: str
     reason: str
     classified: list = field(default_factory=list)  # [(경로, 분류)]
@@ -60,7 +64,7 @@ class Result:
 
 
 def _all(mode, reason, detail=""):
-    return Result("run", "run", mode, reason, detail=detail)
+    return Result("run", "run", "run", mode, reason, detail=detail)
 
 
 def git_runner(cwd=None):
@@ -99,9 +103,10 @@ def decide(event_name, base_sha, head_sha, run_git=None):
     areas = {a for _, a in classified}
     backend = "run" if areas & {"backend", "both"} else "skip"
     frontend = "run" if areas & {"frontend", "both"} else "skip"
-    if backend == frontend == "skip":
-        return Result("skip", "skip", "NORMAL", "docs_only", classified)
-    return Result(backend, frontend, "NORMAL", "changed", classified)
+    e2e = "run" if "run" in (backend, frontend) or "e2e" in areas else "skip"
+    if backend == frontend == e2e == "skip":
+        return Result("skip", "skip", "skip", "NORMAL", "docs_only", classified)
+    return Result(backend, frontend, e2e, "NORMAL", "changed", classified)
 
 
 def main(env=None, run_git=None):
@@ -112,21 +117,21 @@ def main(env=None, run_git=None):
         return 1
     r = decide(env.get("EVENT_NAME", ""), env.get("BASE_SHA", ""), env.get("HEAD_SHA", ""), run_git)
     # 로그: 줄 머리에 고정 문자열을 둬 경로가 워크플로 명령(::)으로 해석되지 않게 한다.
-    print(f"detect: mode={r.mode} reason={r.reason} backend={r.backend} frontend={r.frontend}")
+    print(f"detect: mode={r.mode} reason={r.reason} backend={r.backend} frontend={r.frontend} e2e={r.e2e}")
     if r.detail:
         print(f"detect: detail {r.detail}")
     for path, area in r.classified:
         print(f"detect: {area:8} {path!r}")
     with open(output, "a", encoding="utf-8") as f:
-        f.write(f"backend={r.backend}\nfrontend={r.frontend}\nmode={r.mode}\nreason={r.reason}\n")
+        f.write(f"backend={r.backend}\nfrontend={r.frontend}\ne2e={r.e2e}\nmode={r.mode}\nreason={r.reason}\n")
     summary = env.get("GITHUB_STEP_SUMMARY")
     if summary:
         counts = Counter(a for _, a in r.classified)
         with open(summary, "a", encoding="utf-8") as f:
             f.write("### 변경 감지\n\n| 항목 | 값 |\n| --- | --- |\n")
             f.write(f"| mode | {r.mode} |\n| reason | {r.reason} |\n")
-            f.write(f"| backend | {r.backend} |\n| frontend | {r.frontend} |\n")
-            for area in ("backend", "frontend", "both", "none"):
+            f.write(f"| backend | {r.backend} |\n| frontend | {r.frontend} |\n| e2e | {r.e2e} |\n")
+            for area in ("backend", "frontend", "e2e", "both", "none"):
                 f.write(f"| 경로 수({area}) | {counts.get(area, 0)} |\n")
             f.write("\n경로 목록은 Job 로그에 있다.\n")
     return 0

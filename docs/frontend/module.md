@@ -55,16 +55,20 @@ CSRF 부착·오류 분류·회원가입 화면·스타일 기반이고, FE-04(#
   [regression-log.md](regression-log.md). Node `^24.15.0`(`engines`), `.nvmrc` 24.
 - 개발 서버: 5173 `strictPort`, `/api` proxy 대상은 저장소 루트 `.env`의 `FRONTEND_API_PROXY_TARGET`(없으면 `http://localhost:8080`,
   예시는 루트 `.env.example`). `VITE_` 변수는 쓰지 않는다.
-- 스크립트: `lint`(ESLint), `typecheck`(`tsc -b --noEmit`: app·test·node·e2e 4개 tsconfig), `test`(Vitest, jsdom, `src/**`·`scripts/**`만),
-  `build`(`tsc -b` → `vite build` → `node scripts/checkDist.ts`), `e2e`·`e2e:smoke`(Playwright, 로컬 전용·CI 미실행).
-- 로컬 E2E([FE-D039](decisions.md#1-확정-결정), [FE-D040](decisions.md#1-확정-결정)): `@playwright/test` 1.65.0(devDependency), `playwright.config.ts`
-  (Chromium 하나, workers 1, 재시도 0, timeout 30초, webServer 없음, `baseURL`은 `E2E_BASE_URL`, 실패한 테스트만 trace·스크린샷을 OS 임시 폴더
+- 스크립트: `lint`(ESLint), `typecheck`(`tsc -b --noEmit`: app·test·node·e2e 4개 tsconfig), `test`(Vitest, jsdom, `src/**`·`scripts/**`·`e2e/support/**`의
+  `*.test.ts`), `build`(`tsc -b` → `vite build` → `node scripts/checkDist.ts`), `e2e`·`e2e:smoke`(Playwright. CI는 `.github/workflows/e2e-ci.yml`이
+  `e2e`에 `--grep-invert @slow`(PR) 또는 인자 없이(main push·수동) 실행, [FE-D044](decisions.md#1-확정-결정)).
+- E2E([FE-D039](decisions.md#1-확정-결정), [FE-D040](decisions.md#1-확정-결정), CI [FE-D044](decisions.md#1-확정-결정)): `@playwright/test` 1.65.0(devDependency), `playwright.config.ts`
+  (Chromium 하나, `testMatch` `**/*.spec.ts`, workers 1, 재시도 0, timeout 30초, webServer 없음, `baseURL`은 `E2E_BASE_URL`, 실패한 테스트만 trace·스크린샷을 OS 임시 폴더
   `yhs-e2e/test-results`에, 리포터 `list`), `e2e/globalSetup.ts`(Frontend `/`·프록시 경유 `/api/v1/auth/csrf` 204·Mailpit `/api/v1/info` 확인, 요청마다 5초 제한, 아니면 이유를 밝히고 중단),
   `e2e/support/env.ts`(기본값 없는 `E2E_BASE_URL`·`E2E_MAILPIT_URL`), `accounts.ts`(테스트마다 `/csrf` → `POST /signup`으로 새 계정, 쿠키·헤더 직접 전송),
-  `mailpit.ts`(수신자 검색 → 요청 전 ID 목록에 없던 메일 1통만 읽고 `로그인 인증 번호: NNNN` 줄에서 추출, 15초 폴링), `login.spec.ts`(E2E-01~03).
+  `mailpit.ts`(수신자 검색 → 요청 전 ID 목록에 없던 메일 1통만 읽고 `로그인 인증 번호: NNNN` 줄에서 추출, 15초 폴링), `login.spec.ts`(E2E-01~03, E2E-03은 `@slow`. 단언 실패 출력에 OTP·쿠키 값이 찍히지 않게
+  쿠키는 속성만, 입력은 길이만, 두 OTP는 같음 여부만 비교), `hibpStub.ts`(CI용 HIBP range API 스텁, Node 내장 `http`, 127.0.0.1, 통계 파일, FE-T040).
   ESLint는 e2e가 앱 소스(`src`)를 import하지 못하게 막는다. 서버 묶음은 `infrastructure/docker/e2e/compose.yml`(프로젝트 `yhs-e2e`, postgres·redis·mailpit
   고정 태그, `127.0.0.1` 15432·16379·11025·18025, 볼륨 선언 없음 — postgres·redis 이미지가 익명 볼륨을 선언해 초기화는 `down -v`, 비밀번호 `${E2E_POSTGRES_PASSWORD:?}`,
   healthcheck 2초 간격).
+- E2E CI: `.github/workflows/e2e-ci.yml`(Gate `e2e-ci`, 처음에는 필수 체크 아님 [FE-U12](decisions.md#2-미결)). 구성·판정·로그·Cleanup의 원본은
+  [fe06-e2e-ci.md](../testing/fe06-e2e-ci.md) 2~3장이다. GitHub 실행(L3·L4)은 아직 하지 않았다.
 - API Client(`src/shared/api/apiClient.ts`): `createApiClient()`가 Axios 인스턴스를 감싼다. 인스턴스 보안 기본값 `AXIOS_SECURITY_DEFAULTS`
   (`baseURL: '/api'`, `allowAbsoluteUrls: false`, `withXSRFToken: false`, XSRF 쿠키·헤더 이름 빈 값, `withCredentials: false`, XHR 어댑터),
   `clarifyTimeoutError`. 요청 옵션은 `ApiRequest`(method·path·authScope 필수, timeoutMs·signal·data·params)뿐이다. 경로 검증

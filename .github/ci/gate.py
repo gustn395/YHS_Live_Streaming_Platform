@@ -1,7 +1,7 @@
 """CI 최종 Gate 판정 (Python 3 표준 라이브러리만 사용).
 
-정책 원본: docs/testing/fe02-ci-split.md (1장 Q1·Q6·Q12, 2장 Gate 판정표).
-각 Gate는 BE·FE 양쪽 감지 출력의 조합이 맞는지 먼저 확인한 뒤 자기 영역의 build 결과를 판정한다.
+정책 원본: docs/testing/fe02-ci-split.md (1장 Q1·Q6·Q12, 2장 Gate 판정표), E2E 영역은 docs/testing/fe06-e2e-ci.md (Q2·Q3).
+각 Gate는 BE·FE·E2E 감지 출력의 조합이 맞는지 먼저 확인한 뒤 자기 영역의 build(E2E는 실행 Job) 결과를 판정한다.
 입력은 환경변수로만 받는다.
 """
 
@@ -22,14 +22,17 @@ class Verdict:
     message: str
 
 
-def valid_combination(backend, frontend, mode, reason):
-    if backend not in TARGETS or frontend not in TARGETS:
+def valid_combination(backend, frontend, e2e, mode, reason):
+    if backend not in TARGETS or frontend not in TARGETS or e2e not in TARGETS:
         return False
-    both_run = backend == frontend == "run"
+    # backend·frontend 중 하나라도 실행하면 e2e도 실행해야 한다(fe06 Q2)
+    if "run" in (backend, frontend) and e2e != "run":
+        return False
+    both_run = backend == frontend == e2e == "run"
     if mode == "NORMAL":
         if reason == "changed":
-            return not (backend == frontend == "skip")
-        return reason == "docs_only" and backend == frontend == "skip"
+            return not (backend == frontend == e2e == "skip")
+        return reason == "docs_only" and backend == frontend == e2e == "skip"
     if mode == "FALLBACK":
         return reason in FALLBACK_REASONS and both_run
     if mode == "FULL":
@@ -41,17 +44,17 @@ def _fail(msg):
     return Verdict("FAILED", False, msg)
 
 
-def judge(area, changes_result, backend, frontend, mode, reason, build_result):
-    if area not in ("backend", "frontend"):
+def judge(area, changes_result, backend, frontend, e2e, mode, reason, build_result):
+    if area not in ("backend", "frontend", "e2e"):
         return _fail(f"알 수 없는 Gate 영역: {area!r}")
     if changes_result != "success":
         return _fail(f"변경 감지 Job 결과가 success가 아니다: {changes_result!r}")
-    if not valid_combination(backend, frontend, mode, reason):
-        return _fail(f"감지 출력 조합이 맞지 않는다: backend={backend!r} frontend={frontend!r} "
+    if not valid_combination(backend, frontend, e2e, mode, reason):
+        return _fail(f"감지 출력 조합이 맞지 않는다: backend={backend!r} frontend={frontend!r} e2e={e2e!r} "
                      f"mode={mode!r} reason={reason!r}")
     if build_result not in BUILD_RESULTS:
         return _fail(f"build 결과를 알 수 없다: {build_result!r}")
-    target = backend if area == "backend" else frontend
+    target = {"backend": backend, "frontend": frontend, "e2e": e2e}[area]
     if target == "skip":
         if build_result == "skipped":
             return Verdict("SKIPPED", True, f"정상 생략(reason={reason})")
@@ -63,8 +66,8 @@ def judge(area, changes_result, backend, frontend, mode, reason, build_result):
 
 def main(env=None):
     env = os.environ if env is None else env
-    keys = ["GATE_AREA", "CHANGES_RESULT", "BACKEND_TARGET", "FRONTEND_TARGET", "DETECT_MODE", "DETECT_REASON",
-            "BUILD_RESULT"]
+    keys = ["GATE_AREA", "CHANGES_RESULT", "BACKEND_TARGET", "FRONTEND_TARGET", "E2E_TARGET", "DETECT_MODE",
+            "DETECT_REASON", "BUILD_RESULT"]
     missing = [k for k in keys if k not in env]
     if missing:
         v = _fail(f"Gate 입력 누락: {', '.join(missing)}")

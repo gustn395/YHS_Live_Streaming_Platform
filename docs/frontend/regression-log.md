@@ -427,3 +427,71 @@ S6(Standards·Spec) 지적 12건 중 수용 1·2·4·5·6·8, Q1(로그인·OTP 
 | 검증(S5) | `npm run lint` / `typecheck` / `npm test` / `build`, `git diff --check` | 0 / 0 / 32파일 552건 통과 / 0, 오류 없음 |
 
 - 미실행: 실제 Backend E2E 재실행(정상 Instant 값은 그대로 허용, 이전 E2E 3회에서 통과), Safari·Firefox 확인(이번 재구현으로 엔진의 날짜 문자열 해석에는 기대지 않음).
+
+### 2026-11-28 FE-06(Issue #32) E2E CI 연동 — 브랜치 `feature/32-frontend-e2e-ci`, 기준 커밋 b8b789c + 작업 트리(커밋 전)
+
+로컬 L1·L2만 실행했다(Windows, Python 3.12.4, Node 24.19.0). Docker·Backend·E2E 환경은 띄우지 않았다. 결정·구성 원본은
+[fe06-e2e-ci.md](../testing/fe06-e2e-ci.md)와 [FE-D044](decisions.md#1-확정-결정).
+
+| 단계 | 명령 | 결과 |
+| --- | --- | --- |
+| RED 감지 | e2e 분류·출력 테스트 추가 뒤 `python -B -I .github/ci/run_tests.py` | 16건 실패(`Result`에 `e2e` 없음, e2e 경로가 `both`) |
+| GREEN 감지 | `detect_changes.py`에 `e2e` 영역·출력 | 113건 통과(기존 판정 테스트는 기대값 그대로, 출력 줄 테스트만 `e2e=run` 추가) |
+| RED·GREEN Gate | 3개 대상 조합·`area=e2e`·`E2E_TARGET` 누락 테스트(기존 판정 사례는 e2e 인자만 더함) | 19건 실패 → 121건 통과 |
+| RED·GREEN 결과 검증 | `e2e_report.py`(목록 대비 필수 집합) | 모듈 없음 → 143건 통과 → 뮤테이션 생존 2건을 잡는 테스트 2건 추가 |
+| RED·GREEN 로그 필터 | `log_filter.py`(spring·compose·playwright Allowlist) | 모듈 없음 → 통과. 고친 것: 테스트 픽스처 공백 1곳, `cause=…Exception`이 긴 토큰으로 가려짐, `(1.4m)` 시간 형식, 빈 줄 |
+| GREEN 스텁 검증 | `hibp_stub_check.py` | 통과. 테스트를 먼저 썼지만 RED 실행 결과는 따로 보지 않았다(다른 작업의 뮤테이션 실행을 멈춘 직후). 뮤테이션으로 대신 확인 |
+| RED·GREEN 스텁 | `npx vitest run e2e/support/hibpStub.test.ts` | 모듈 없음 → MSW가 요청을 가로채 15건 실패(테스트를 TCP 소켓 요청으로 바꿈) → 응답 chunked로 1건 실패(`Content-Length` 명시) → 17건 통과 |
+| Mutation | 감지 3, Gate 2, 결과 검증 7, 로그 필터 10, 스텁 검증 6, 스텁 9(매번 원본 복원) | 37건 모두 실패로 잡힘. 첫 로그 필터 실행은 중간에 멈춰 JWT 규칙 1줄이 지워진 채 남았고, 발견해 복구한 뒤 백업을 남기는 방식으로 다시 실행 |
+| L1 Python | `python -B -I .github/ci/run_tests.py` | 182건 통과(기존 98건 포함) |
+| L1 Frontend | `npm run lint` / `typecheck` / `npm test` / `build` | 0 / 0 / 33파일 569건 통과 / 0(checkDist 통과) |
+| L1 수집 | `npx playwright test --list`, `--grep-invert @slow`, `npm run e2e:smoke -- --list` | 3건(스텁 단위 테스트 미수집) / 2건(E2E-01·02) / 1건(E2E-01) |
+| L1 YAML | SchemaStore `github-workflow.json`·`github-action.json`(draft-07) 검증, run 블록 `bash -n`(Git Bash) | 5개 파일 오류 0, run 블록 18개 문법 오류 0·`${{ }}` 없음 |
+| 실제 데이터 | 실제 `--list` JSON으로 `e2e_report` 판정, FE-04 로컬 E2E 출력·Backend 로그로 `log_filter` | PR 필수 2·FULL 필수 3 계산, 범위가 맞지 않으면 실패. 결과·집계 줄과 Spring 줄만 남고 그 밖은 가려짐 |
+| 스텁 단독 | `node e2e/support/hibpStub.ts`(환경변수 없음 / 있음) | 종료 코드 1과 안내 / `/healthz` 200·통계 `health 1`. Windows Git Bash `kill`은 Node의 SIGTERM 처리기로 가지 않아 종료 코드 143 |
+| 기타 | `git diff --check` | 오류 없음 |
+
+- 미실행: L3·L4(GitHub), 필수 체크 전환(FE-U12). Linux 러너에서의 `ss`·`openssl`·`docker compose --wait` 동작과 단계별 시간은
+  L3에서 확인한다.
+
+로컬 E2E 회귀(2026-11-28, 사용자 승인 뒤, Windows·Docker 29.8.0·Chromium). 실행마다 새 비밀 값 파일(저장소 밖, 값 미출력),
+시작 전·끝난 뒤 `yhs-e2e` `down -v`. 다른 Docker 프로젝트는 건드리지 않았다.
+
+| 회차 | 구성 | 결과 |
+| --- | --- | --- |
+| 1 | test-spec 3장(dev 5173·`bootRun`·실제 HIBP), `npm run e2e` | 3 passed(1.4m). 첫 Backend 기동은 실행자가 `SPRING_DATASOURCE_PASSWORD`를 넘기지 않아 DB 인증 실패(절차 실수, 코드 결함 아님, CI는 두 변수를 함께 설정) → 넘겨서 다시 기동 |
+| 2 | CI와 같은 방식: `:app:bootWar`(실행 WAR 1개) → HIBP 스텁(18099) → `java -jar`(`SERVER_ADDRESS=127.0.0.1`) → `npm run build` → `vite preview --host localhost --port 4173 --strictPort` | 준비 확인: 스텁 `/healthz` 200·health 200·preview 200·프록시 `/api/v1/auth/csrf` 204. 리스너 `127.0.0.1:18080`·`127.0.0.1:18099`·`[::1]:4173`(Windows는 localhost가 ::1) |
+| 2 | 목록 JSON → `PLAYWRIGHT_JSON_OUTPUT_FILE` + `--reporter=list,json` 전체 → `log_filter --kind playwright` → `e2e_report --scope full` → `hibp_stub_check --min-ok 3` | 3 passed(1.2m). 필터 출력은 시작·결과 3줄·집계만. report PASS(실행 3·필수 3·@slow 1). 같은 결과를 `--scope pr`로 판정하면 FAIL(범위 밖 실행, PR의 @slow). 스텁 ok 3·unexpected 0·health 1(스텁이 떠 있는 동안 읽음) |
+| 2 | PR 범위 `--grep-invert @slow` → `e2e_report --scope pr` → `hibp_stub_check --min-ok 5`(누적) | 2 passed, report PASS(실행 2·필수 2·@slow 0), 스텁 ok 5·unexpected 0 |
+| 3 | 단언 3곳을 하나씩 일부러 실패(`sameSite 'Lax'`, 길이 1, 같음 true)시켜 `--grep E2E-0n`, 필터 없는 원본 출력 검사, 매번 복원 | 3건 모두 실패. 출력은 쿠키 속성 4개 차이, `Expected: 1 / Received: 0`, `Expected: true / Received: false`뿐이고 JWT·쿠키 `value`·4자리 OTP 문자열 없음. spec 복원 확인 |
+| 정리 | 프로세스 종료(1회차 bootRun·Vite 자식 프로세스는 명령줄로 fe06 Worktree 것임을 확인한 뒤 종료), `down -v`, 실패 trace(OS 임시 `yhs-e2e`)·스텁 통계·비밀 값 파일 삭제 | 컨테이너·볼륨 0개, 15432·16379·11025·18025·18080·5173·4173·18099 닫힘 |
+
+S5·S6(2026-11-28): S5 통과(Python 182, Frontend 0·0·569·0, 수집 3, YAML 5, diff 0) 뒤 S6 Standards·Spec 하위 리뷰에서 반영 10건(R1~R10),
+유지 2건(FE-U11 상태·Q4 그 자리 정정은 사용자 결정), 보류 2건(스크립트 중복·감지 필드 묶음). 반영과 로컬 모의 검증:
+
+| 항목 | 명령·방법 | 결과 |
+| --- | --- | --- |
+| R4 실패 단계 | `failed_step.py` 테스트 추가 → `python -B -I .github/ci/run_tests.py` | RED(모듈 없음) → GREEN 191건. Mutation 3건(취소 무시, 부분 일치 허용, 빈 표시) 모두 실패로 잡힘 |
+| R2 대기 시간 | 스텁 대기 루프와 같은 줄을 서버 없는 18099(연결 거부)와 응답 없는 서버(18999)에 실행 | 두 경우 모두 42초에 자체 `::error`로 종료(Step 제한 60초). Backend·preview는 계산으로 최대 약 154초·45초(제한 180·60초) |
+| R5 볼륨 확인 | Cleanup과 같은 줄을 로컬 `yhs-e2e`로 실행: 정상 `down -v` / `-v` 없이 `down` | 기동 중 컨테이너 3개, Mounts의 Docker 볼륨 2개, **두 볼륨 모두 프로젝트 라벨 없음**(라벨 검사만으로는 0개로 보여 잔존을 못 잡음). 정상: 남은 볼륨 0·실패 0. 남긴 경우: "볼륨 남음" 2건을 잡음 → 그 2개만 이름으로 삭제. 끝난 뒤 컨테이너·네트워크 0, 포트 닫힘 |
+| R1·R3·R6~R10 | 문서·설명·import·이름 수정, 진단 `ps`·`logs`에만 임시 비밀번호 값 | — |
+| S5 재검증 | Python / lint / typecheck / Vitest / build / `playwright --list` / YAML 스키마 / run 블록 `bash -n` / `git diff --check` | 191 통과 / 0 / 0 / 33파일 569 / 0 / 3건 / 5개 OK / 18개 OK / 오류 없음 |
+
+- GitHub에서만 확인할 수 있는 것(실제 실패 실행의 실패 단계 기록, 러너의 볼륨 라벨 동작)은 fe06 Q15대로 L3·L4 실제 실행과 FE-U12로 넘긴다.
+- S10 보안 리뷰(2026-11-28, 하위 리뷰): 기준(HIGH·MEDIUM, 신뢰도 8 이상)을 넘는 후보 0건. 확인 범위: 실행별 비밀 생성·마스킹·GITHUB_ENV
+  (한 줄 값, 마스킹 먼저), `run:`의 PR 입력 사용 없음, GITHUB_OUTPUT 값(정수·고정값), 로그 필터 우회·워크플로 명령 삽입(접두어·`::` 끊기),
+  결과·실패 단계·스텁 검증 출력(개수·고정 토큰), 스텁·preview·Backend loopback.
+- S7 퀴즈: 미실행(사용자 결정 Q1=b, 수동 예외).
+
+### 2026-11-28 FE-06(Issue #32) CodeRabbit 리뷰 반영 — 기준 커밋 ae0ac44 + 작업 트리(커밋 전)
+
+인라인 2건을 지금 코드와 실제 데이터로 확인했다(S8). Docker·Backend는 실행하지 않았다.
+
+| 단계 | 명령·방법 | 결과 |
+| --- | --- | --- |
+| CR-1 사실 확인 | 로컬 2회차 실제 목록·결과 JSON(FULL·PR)의 spec `id`·`file`·`line`·`column` 비교 | 세 테스트 모두 목록과 결과에서 같다 → 키에 넣어도 연결이 깨지지 않음. 지적 유효: 기존 키(파일, 제목)는 다른 describe의 같은 제목 테스트를 하나로 합친다 |
+| CR-1 RED | 같은 파일·같은 제목·다른 줄(하나만 `@slow`) 테스트, 위치 필드 누락 테스트 추가 → `python -B -I .github/ci/run_tests.py` | 2건 실패("FULL에서 @slow 미실행", 위치 없는 결과 통과) |
+| CR-1 GREEN | `_key`를 (id, file, line, column, title)로, 목록·결과가 같은 함수 사용, 형식이 다르면 해석 실패 | 193건 통과. 실제 JSON 재판정 FULL PASS(3·3·@slow 1), PR PASS(2·2·0) |
+| CR-1 Mutation | 키를 (file, title) / (file, line, title)로 되돌림 | 1 실패로 잡힘 / 2 통과(이 회귀 테스트는 줄로도 구분됨, id·column은 같은 줄 두 테스트용 보조 구분자) |
+| CR-2 경로 확인 | Backend main 로그 호출 검색, 로컬 2회차 실제 Backend 로그 검색, CI 비밀·테스트 비밀번호 형식 확인 | 공백 있는 인용 비밀 값이 필터로 가는 경로 없음(로그 호출은 memberId·stage·reason·예외 클래스, 실제 로그 일치 2줄은 `keyvalue` 클래스 이름, 비밀은 Base64·hex·base64url). 지시대로 **미적용** |
+| 검증 | `git diff --check` | 오류 없음 |

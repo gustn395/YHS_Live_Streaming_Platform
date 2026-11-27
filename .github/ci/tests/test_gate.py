@@ -1,4 +1,7 @@
-"""gate 판정 테스트. BE·FE 양쪽 감지 출력의 전체 조합을 곱집합으로 검사한다. 원본: docs/testing/fe02-ci-split.md."""
+"""gate 판정 테스트. BE·FE·E2E 감지 출력의 전체 조합을 곱집합으로 검사한다.
+
+원본: docs/testing/fe02-ci-split.md, E2E 영역은 docs/testing/fe06-e2e-ci.md(Q2·Q3).
+"""
 
 import itertools
 import os
@@ -8,21 +11,23 @@ import unittest
 
 import gate
 
-# gate.py와 독립적으로 적은 허용 조합. (backend, frontend, mode, reason)
+# gate.py와 독립적으로 적은 허용 조합. (backend, frontend, e2e, mode, reason)
+# 규칙: backend·frontend 중 하나라도 run이면 e2e도 run. e2e 전용 변경은 skip·skip·run.
 VALID_COMBOS = {
-    ("run", "run", "NORMAL", "changed"),
-    ("run", "skip", "NORMAL", "changed"),
-    ("skip", "run", "NORMAL", "changed"),
-    ("skip", "skip", "NORMAL", "docs_only"),
-    ("run", "run", "FALLBACK", "git_error"),
-    ("run", "run", "FALLBACK", "empty_diff"),
-    ("run", "run", "FALLBACK", "invalid_input"),
-    ("run", "run", "FALLBACK", "unknown_event"),
-    ("run", "run", "FULL", "push_main"),
-    ("run", "run", "FULL", "dispatch"),
+    ("run", "run", "run", "NORMAL", "changed"),
+    ("run", "skip", "run", "NORMAL", "changed"),
+    ("skip", "run", "run", "NORMAL", "changed"),
+    ("skip", "skip", "run", "NORMAL", "changed"),
+    ("skip", "skip", "skip", "NORMAL", "docs_only"),
+    ("run", "run", "run", "FALLBACK", "git_error"),
+    ("run", "run", "run", "FALLBACK", "empty_diff"),
+    ("run", "run", "run", "FALLBACK", "invalid_input"),
+    ("run", "run", "run", "FALLBACK", "unknown_event"),
+    ("run", "run", "run", "FULL", "push_main"),
+    ("run", "run", "run", "FULL", "dispatch"),
 }
 
-AREAS = ["backend", "frontend"]
+AREAS = ["backend", "frontend", "e2e"]
 CHANGES = ["success", "failure", "cancelled", "skipped", ""]
 TARGETS = ["run", "skip", "", "RUN"]
 MODES = ["NORMAL", "FALLBACK", "FULL", "", "normal", "SKIPPED"]
@@ -31,11 +36,11 @@ REASONS = ["changed", "docs_only", "git_error", "empty_diff", "invalid_input", "
 BUILDS = ["success", "failure", "cancelled", "skipped", ""]
 
 
-def expected(area, changes, be, fe, mode, reason, build):
+def expected(area, changes, be, fe, e2e, mode, reason, build):
     """(passed, status) 참조 판정."""
-    if changes != "success" or (be, fe, mode, reason) not in VALID_COMBOS:
+    if changes != "success" or (be, fe, e2e, mode, reason) not in VALID_COMBOS:
         return False, "FAILED"
-    target = be if area == "backend" else fe
+    target = {"backend": be, "frontend": fe, "e2e": e2e}[area]
     if target == "skip":
         return (True, "SKIPPED") if build == "skipped" else (False, "FAILED")
     return (True, mode) if build == "success" else (False, "FAILED")
@@ -44,21 +49,21 @@ def expected(area, changes, be, fe, mode, reason, build):
 class GateProductTest(unittest.TestCase):
     def test_full_cartesian_product(self):
         count = 0
-        for args in itertools.product(AREAS, CHANGES, TARGETS, TARGETS, MODES, REASONS, BUILDS):
+        for args in itertools.product(AREAS, CHANGES, TARGETS, TARGETS, TARGETS, MODES, REASONS, BUILDS):
             v = gate.judge(*args)
             self.assertEqual((v.passed, v.status), expected(*args), args)
             count += 1
-        self.assertEqual(count, 2 * 5 * 4 * 4 * 6 * 10 * 5)
+        self.assertEqual(count, 3 * 5 * 4 * 4 * 4 * 6 * 10 * 5)
 
 
 class GateNamedCasesTest(unittest.TestCase):
-    def j(self, area="frontend", changes="success", be="run", fe="run", mode="NORMAL", reason="changed",
-          build="success"):
-        return gate.judge(area, changes, be, fe, mode, reason, build)
+    def j(self, area="frontend", changes="success", be="run", fe="run", e2e="run", mode="NORMAL",
+          reason="changed", build="success"):
+        return gate.judge(area, changes, be, fe, e2e, mode, reason, build)
 
     def test_contradiction_normal_changed_skip_skip_fails_on_both_gates(self):
         for area in AREAS:
-            v = self.j(area=area, be="skip", fe="skip", build="skipped")
+            v = self.j(area=area, be="skip", fe="skip", e2e="skip", build="skipped")
             self.assertFalse(v.passed, area)
 
     def test_fallback_with_a_skipped_side_fails(self):
@@ -88,11 +93,42 @@ class GateNamedCasesTest(unittest.TestCase):
             self.assertFalse(self.j(changes=c).passed)
 
     def test_unknown_area_fails(self):
-        self.assertFalse(gate.judge("both", "success", "run", "run", "NORMAL", "changed", "success").passed)
+        self.assertFalse(gate.judge("both", "success", "run", "run", "run", "NORMAL", "changed", "success").passed)
 
     def test_message_mentions_reason(self):
         v = self.j(mode="FALLBACK", reason="git_error")
         self.assertIn("git_error", v.message)
+
+    # FE-06: e2e 영역(fe06-e2e-ci.md Q2·Q3)
+
+    def test_e2e_only_change_skips_backend_and_frontend_gates(self):
+        for area in ("backend", "frontend"):
+            v = self.j(area=area, be="skip", fe="skip", e2e="run", build="skipped")
+            self.assertEqual((v.passed, v.status), (True, "SKIPPED"), area)
+
+    def test_e2e_only_change_runs_e2e_gate(self):
+        v = self.j(area="e2e", be="skip", fe="skip", e2e="run", build="success")
+        self.assertEqual((v.passed, v.status), (True, "NORMAL"))
+
+    def test_e2e_must_run_when_backend_or_frontend_runs(self):
+        for be, fe in (("run", "skip"), ("skip", "run"), ("run", "run")):
+            for area in AREAS:
+                v = self.j(area=area, be=be, fe=fe, e2e="skip", build="skipped")
+                self.assertFalse(v.passed, (area, be, fe))
+
+    def test_e2e_job_skipped_or_cancelled_when_run_fails(self):
+        for build in ("skipped", "cancelled", "failure", ""):
+            self.assertFalse(self.j(area="e2e", build=build).passed, build)
+
+    def test_e2e_docs_only_is_skipped_pass(self):
+        v = self.j(area="e2e", be="skip", fe="skip", e2e="skip", reason="docs_only", build="skipped")
+        self.assertEqual((v.passed, v.status), (True, "SKIPPED"))
+
+    def test_e2e_full_and_fallback_pass_only_on_success(self):
+        for mode, reason in (("FULL", "push_main"), ("FULL", "dispatch"), ("FALLBACK", "git_error")):
+            v = self.j(area="e2e", mode=mode, reason=reason)
+            self.assertEqual((v.passed, v.status), (True, mode))
+            self.assertFalse(self.j(area="e2e", mode=mode, reason=reason, build="failure").passed)
 
 
 class GateMainTest(unittest.TestCase):
@@ -103,7 +139,7 @@ class GateMainTest(unittest.TestCase):
 
     def env(self, **kw):
         e = {"GATE_AREA": "frontend", "CHANGES_RESULT": "success", "BACKEND_TARGET": "skip",
-             "FRONTEND_TARGET": "run", "DETECT_MODE": "NORMAL", "DETECT_REASON": "changed",
+             "FRONTEND_TARGET": "run", "E2E_TARGET": "run", "DETECT_MODE": "NORMAL", "DETECT_REASON": "changed",
              "BUILD_RESULT": "success", "GITHUB_STEP_SUMMARY": self.summary}
         e.update(kw)
         return e
@@ -120,6 +156,17 @@ class GateMainTest(unittest.TestCase):
         e = self.env()
         del e["BACKEND_TARGET"]
         self.assertEqual(gate.main(env=e), 1)
+
+    def test_missing_e2e_target_fails_every_gate(self):
+        for area in AREAS:
+            e = self.env(GATE_AREA=area, BACKEND_TARGET="run", FRONTEND_TARGET="run")
+            del e["E2E_TARGET"]
+            self.assertEqual(gate.main(env=e), 1, area)
+
+    def test_e2e_gate_summary_title(self):
+        self.assertEqual(gate.main(env=self.env(GATE_AREA="e2e")), 0)
+        with open(self.summary, encoding="utf-8") as f:
+            self.assertIn("Gate e2e-ci: NORMAL (PASS)", f.read())
 
     def test_fallback_prints_warning_annotation(self):
         import contextlib

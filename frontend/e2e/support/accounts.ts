@@ -20,7 +20,8 @@ function readCsrfToken(setCookies: readonly string[]): string {
 /**
  * Backend 가입 API로 새 계정을 만든다(Frontend dev 서버 프록시 경유, CSRF 이중 제출).
  * 계정마다 username·이메일이 달라 회원별 OTP 제한과 Mailpit 수신함이 섞이지 않는다.
- * 가입은 Backend 설정대로 실제 HIBP를 호출한다(인터넷 필요).
+ * 가입은 Backend 설정의 HIBP 주소를 호출한다: 로컬 기본은 실제 HIBP(인터넷 필요), CI는 HIBP 스텁(FE-D044 (4)).
+ * 테스트마다 이 함수를 한 번 부르므로, CI는 실행한 테스트 수를 스텁의 최소 정상 호출 수로 쓴다(fe06 Q5).
  */
 export async function createAccount(): Promise<TestAccount> {
   const suffix = randomBytes(6).toString('hex');
