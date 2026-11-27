@@ -55,10 +55,13 @@ def _specs(report):
 
 
 def _key(spec):
-    title, file = spec.get("title"), spec.get("file")
-    if not isinstance(title, str) or not isinstance(file, str):
+    """목록과 결과가 같은 방식으로 쓰는 테스트 식별자. 같은 파일에 같은 제목이 다른 describe에 있어도 위치·id로 구분한다."""
+    sid, file, line, column, title = (spec.get(k) for k in ("id", "file", "line", "column", "title"))
+    if not all(isinstance(v, str) for v in (sid, file, title)):
         raise ReportError("spec 식별자")
-    return file, title
+    if not all(isinstance(v, int) and not isinstance(v, bool) for v in (line, column)):
+        raise ReportError("spec 위치")
+    return sid, file, line, column, title
 
 
 def _is_slow(spec):

@@ -482,3 +482,16 @@ S5·S6(2026-11-28): S5 통과(Python 182, Frontend 0·0·569·0, 수집 3, YAML 
   (한 줄 값, 마스킹 먼저), `run:`의 PR 입력 사용 없음, GITHUB_OUTPUT 값(정수·고정값), 로그 필터 우회·워크플로 명령 삽입(접두어·`::` 끊기),
   결과·실패 단계·스텁 검증 출력(개수·고정 토큰), 스텁·preview·Backend loopback.
 - S7 퀴즈: 미실행(사용자 결정 Q1=b, 수동 예외).
+
+### 2026-11-28 FE-06(Issue #32) CodeRabbit 리뷰 반영 — 기준 커밋 ae0ac44 + 작업 트리(커밋 전)
+
+인라인 2건을 지금 코드와 실제 데이터로 확인했다(S8). Docker·Backend는 실행하지 않았다.
+
+| 단계 | 명령·방법 | 결과 |
+| --- | --- | --- |
+| CR-1 사실 확인 | 로컬 2회차 실제 목록·결과 JSON(FULL·PR)의 spec `id`·`file`·`line`·`column` 비교 | 세 테스트 모두 목록과 결과에서 같다 → 키에 넣어도 연결이 깨지지 않음. 지적 유효: 기존 키(파일, 제목)는 다른 describe의 같은 제목 테스트를 하나로 합친다 |
+| CR-1 RED | 같은 파일·같은 제목·다른 줄(하나만 `@slow`) 테스트, 위치 필드 누락 테스트 추가 → `python -B -I .github/ci/run_tests.py` | 2건 실패("FULL에서 @slow 미실행", 위치 없는 결과 통과) |
+| CR-1 GREEN | `_key`를 (id, file, line, column, title)로, 목록·결과가 같은 함수 사용, 형식이 다르면 해석 실패 | 193건 통과. 실제 JSON 재판정 FULL PASS(3·3·@slow 1), PR PASS(2·2·0) |
+| CR-1 Mutation | 키를 (file, title) / (file, line, title)로 되돌림 | 1 실패로 잡힘 / 2 통과(이 회귀 테스트는 줄로도 구분됨, id·column은 같은 줄 두 테스트용 보조 구분자) |
+| CR-2 경로 확인 | Backend main 로그 호출 검색, 로컬 2회차 실제 Backend 로그 검색, CI 비밀·테스트 비밀번호 형식 확인 | 공백 있는 인용 비밀 값이 필터로 가는 경로 없음(로그 호출은 memberId·stage·reason·예외 클래스, 실제 로그 일치 2줄은 `keyvalue` 클래스 이름, 비밀은 Base64·hex·base64url). 지시대로 **미적용** |
+| 검증 | `git diff --check` | 오류 없음 |

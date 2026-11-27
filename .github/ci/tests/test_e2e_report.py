@@ -17,11 +17,14 @@ import e2e_report as er
 SECRET_ERROR = "Expected: \"1234\" Received: \"5678\" Cookie __Host-yhs_at=eyJhbGciOi.secret"
 
 
-def spec(title, tags=(), status="expected", results=1, error=None):
+def spec(title, tags=(), status="expected", results=1, error=None, line=None, column=1):
     test = {"projectName": "chromium", "status": status,
             "results": [{"status": "passed" if status == "expected" else "failed",
                          "errors": [{"message": error}] if error else []} for _ in range(results)]}
-    return {"title": title, "file": "login.spec.ts", "tags": list(tags), "tests": [test]}
+    # 실제 reporter처럼 id·line·column을 둔다. 줄을 정하지 않으면 제목마다 다른 줄로 본다.
+    line = line if line is not None else 1000 + sum(map(ord, title))
+    return {"title": title, "file": "login.spec.ts", "id": f"id-{line}-{column}", "line": line, "column": column,
+            "tags": list(tags), "tests": [test]}
 
 
 def report(specs, nested=None, **stats):
@@ -98,6 +101,27 @@ class JudgeTest(unittest.TestCase):
         self.assertFalse(er.judge("pr", listed, PR_OK).passed)
         ok = report([spec("E2E-01 a @smoke", ["smoke"]), spec("E2E-02 b"), spec("E2E-04 new")], expected=3)
         self.assertTrue(er.judge("pr", listed, ok).passed)
+
+    def test_same_title_in_different_describe_blocks_are_separate_tests(self):
+        # CodeRabbit(#32) 지적: 같은 파일·같은 제목이라도 다른 describe의 테스트는 따로 세고 @slow도 따로 판정한다
+        listing = report([], skipped=2, nested=[
+            {"title": "fast", "specs": [spec("same title", [], "skipped", 0, line=10)], "suites": []},
+            {"title": "slow", "specs": [spec("same title", ["slow"], "skipped", 0, line=20)], "suites": []}])
+        pr_only_fast = report([spec("same title", line=10)], expected=1)
+        v = er.judge("pr", listing, pr_only_fast)
+        self.assertTrue(v.passed, v.problems)
+        self.assertEqual((v.executed, v.required, v.slow_executed), (1, 1, 0))
+        full_both = report([spec("same title", line=10), spec("same title", ["slow"], line=20)], expected=2)
+        v = er.judge("full", listing, full_both)
+        self.assertTrue(v.passed, v.problems)
+        self.assertEqual((v.executed, v.required, v.slow_executed), (2, 2, 1))
+        pr_ran_slow_twin = report([spec("same title", line=10), spec("same title", ["slow"], line=20)], expected=2)
+        self.assertIn("PR에서 @slow 실행", er.judge("pr", listing, pr_ran_slow_twin).problems)
+
+    def test_spec_without_location_fields_is_malformed(self):
+        broken = spec("E2E-01 a @smoke", ["smoke"])
+        del broken["line"]
+        self.assertFalse(er.judge("pr", LIST, report([broken, spec("E2E-02 b")], expected=2)).passed)
 
     def test_nested_describe_suites_are_counted(self):
         r = report([spec("E2E-01 a @smoke", ["smoke"])], expected=2,
