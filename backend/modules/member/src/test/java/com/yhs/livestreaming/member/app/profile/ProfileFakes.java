@@ -43,8 +43,14 @@ final class ProfileFakes {
         final Map<Long, Member> byId = new LinkedHashMap<>();
         final List<Collection<Long>> batchCalls = new ArrayList<>();
         final List<String> nicknameUpdates = new ArrayList<>();
-        /** 비어 있지 않으면 실제 판정 대신 이 값을 차례로 돌려준다(경합 재현용). */
+        /**
+         * 비어 있지 않으면 UPDATE 호출마다 하나씩 꺼낸다(경합 재현용). 0이면 실제 판정 없이 0행을 돌려주고, 0이 아니면 실제
+         * 판정·변경 경로를 그대로 탄다.
+         */
         final java.util.Deque<Integer> forcedUpdateRows = new java.util.ArrayDeque<>();
+        /** 닉네임 UPDATE를 판정하기 직전에 호출 순번(1부터)과 함께 실행한다(경합 재현용). */
+        java.util.function.IntConsumer beforeNicknameUpdate;
+        private int nicknameUpdateCalls;
         /** 닉네임 UPDATE가 반영된 직후 실행한다(경합 재현용). */
         Runnable afterNicknameUpdate;
 
@@ -65,8 +71,12 @@ final class ProfileFakes {
 
         @Override
         public int updateNicknameOfActive(long id, String nickname, Instant now) {
-            if (!forcedUpdateRows.isEmpty()) {
-                return forcedUpdateRows.pop();
+            nicknameUpdateCalls++;
+            if (beforeNicknameUpdate != null) {
+                beforeNicknameUpdate.accept(nicknameUpdateCalls);
+            }
+            if (!forcedUpdateRows.isEmpty() && forcedUpdateRows.pop() == 0) {
+                return 0;
             }
             Member member = byId.get(id);
             if (member == null || member.getAccountStatus() != AccountStatus.ACTIVE) {

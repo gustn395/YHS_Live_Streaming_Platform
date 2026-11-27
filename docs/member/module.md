@@ -120,8 +120,9 @@ username·IP는 SHA-256 hex로 키에 쓴다. 원문이 키 목록에 남지 않
 ### 내 정보 (BE-07)
 
 - 조회(`MemberProfileService.getMyProfile`): global 체인의 Access 쿠키·세션 검증 뒤 DB에서 회원을 다시 읽는다. 없음·PENDING이면 `LoginSessionStore.revoke(sid, memberId)` 후 401 `AUTH_UNAUTHENTICATED`, DISABLED면 같은 폐기 후 403 `MEMBER_ACCOUNT_DISABLED`. 폐기 중 Redis 장애는 503([MB-D019](decisions.md#1-확정-결정)).
-- 닉네임 수정(`changeNickname`): 포트 `MemberRepository.updateNicknameOfActive`(어댑터는 ACTIVE 조건 UPDATE 한 문장) → 0행이면 위 상태 확인(세션 폐기·예외), 그 사이 다시 ACTIVE면 한 번 더 시도(또 0행이면 `IllegalStateException`) → 다시 읽어 응답. UPDATE가 반영된 뒤에는 바로 정지돼도 바뀐 정보를 200으로 돌려준다(커밋한 변경을 403으로 알리지 않음). 닉네임 형식은 `NicknameUpdateRequest`(앞뒤 공백 제거, 2~20자, Cc·Cf 금지)가 검증한다.
+- 닉네임 수정(`changeNickname`): 포트 `MemberRepository.updateNicknameOfActive`(어댑터는 ACTIVE 조건 UPDATE 한 문장) → 0행이면 위 상태 확인(세션 폐기·예외), 그 사이 다시 ACTIVE면 한 번 더 시도(또 0행이면 상태를 다시 확인해 정지·삭제면 세션 폐기·403/401, 여전히 ACTIVE면 `IllegalStateException`) → 다시 읽어 응답. UPDATE가 반영된 뒤에는 바로 정지돼도 바뀐 정보를 200으로 돌려준다(커밋한 변경을 403으로 알리지 않음). 닉네임 형식은 `NicknameUpdateRequest`(앞뒤 공백 제거, 2~20자, Cc·Cf 금지)가 검증한다.
 - 컨트롤러(`ApiV1MemberController`): 401(회원 없음)·403(DISABLED)일 때만 `AuthCookieWriter.clearTokens`. 공개 경로가 아니라 global 체인이 인증을 요구한다.
+- OpenAPI(`MemberOpenApiConfig`, `OperationCustomizer`): `ApiV1MemberController` operation의 보안 요구사항이 여러 개면 하나로 합친다(배열 원소는 OR, 원소 안의 스킴은 AND라서 PATCH는 "Access 쿠키 그리고 CSRF 헤더").
 
 ## 3. 공개 API
 

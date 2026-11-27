@@ -113,13 +113,52 @@ class MemberProfileServiceTest {
         members.forcedUpdateRows.push(1);
         members.forcedUpdateRows.push(0);
 
-        assertThat(service.changeNickname(me(1L), "새 닉네임").memberId()).isEqualTo(1L);
+        MemberProfile retried = service.changeNickname(me(1L), "새 닉네임");
+
+        assertThat(retried.memberId()).isEqualTo(1L);
+        assertThat(retried.nickname()).isEqualTo("새 닉네임");
+        assertThat(members.nicknameUpdates).containsExactly("1:새 닉네임"); // 두 번째 시도에서 실제로 바뀌었다
 
         members.forcedUpdateRows.push(0);
         members.forcedUpdateRows.push(0);
-        assertThatThrownBy(() -> service.changeNickname(me(1L), "새 닉네임"))
+        assertThatThrownBy(() -> service.changeNickname(me(1L), "다른 닉네임"))
                 .isInstanceOf(IllegalStateException.class);
         assertThat(sessions.revoked).isEmpty();
+    }
+
+    @Test
+    void memberDeletedBeforeTheRetryIsUnauthenticatedAndLosesSession() { // MB-T057·MB-T056: 재시도 실패 원인이 삭제면 401
+        members.add(ProfileFakes.local(1L, "tester01", AccountStatus.ACTIVE));
+        members.forcedUpdateRows.push(0);
+        members.beforeNicknameUpdate = call -> {
+            if (call == 2) { // 재시도 직전에 삭제된다
+                members.byId.remove(1L);
+            }
+        };
+
+        assertThatThrownBy(() -> service.changeNickname(me(1L), "새 닉네임"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.errorCode()).isEqualTo(CommonErrorCode.UNAUTHENTICATED));
+        assertThat(sessions.revoked).containsExactly(SID + ":1");
+        assertThat(members.nicknameUpdates).isEmpty();
+    }
+
+    @Test
+    void memberDisabledBeforeTheRetryIsForbiddenAndLosesSession() { // MB-T057·MB-T056: 재시도 실패 원인이 정지면 403
+        members.add(ProfileFakes.local(1L, "tester01", AccountStatus.ACTIVE));
+        members.forcedUpdateRows.push(0); // 첫 UPDATE는 경합으로 0행, 그 뒤 상태 확인에서는 ACTIVE
+        members.beforeNicknameUpdate = call -> {
+            if (call == 2) { // 재시도 직전에 정지된다
+                org.springframework.test.util.ReflectionTestUtils.setField(
+                        members.byId.get(1L), "accountStatus", AccountStatus.DISABLED);
+            }
+        };
+
+        assertThatThrownBy(() -> service.changeNickname(me(1L), "새 닉네임"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.errorCode()).isEqualTo(MemberErrorCode.ACCOUNT_DISABLED));
+        assertThat(sessions.revoked).containsExactly(SID + ":1");
+        assertThat(members.nicknameUpdates).isEmpty();
     }
 
     @Test

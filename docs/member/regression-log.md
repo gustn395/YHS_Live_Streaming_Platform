@@ -97,5 +97,11 @@
 | 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*MemberRepositoryAdapterTest" :app:test --tests "*ModuleBoundaryTest" --tests "*MemberProfileApiIntegrationTest" --tests "*AuthStoreFailureIntegrationTest" --continue` (#27 검증 공백 6건 회귀 감시 테스트, 사용자 Q1=a) | 성공(exit 0) | 테스트 전용(제품 코드 변경 없음). 이미 맞는 동작을 고정하므로 처음부터 통과(RED 없음). ①② ArchUnit은 위반 대상으로 규칙이 실제로 잡는지 확인 |
 | 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#27 S5) | 성공(exit 0). member 281, app 152 통과 | |
 | 2026-11-27 | `.\gradlew.bat :app:build` (#27 Commit 직전) | 성공(exit 0). WAR 2개(실행 가능·plain), `:app:test` UP-TO-DATE(직전 --rerun 통과) | S7 5/5 완료 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*MemberProfileServiceTest" :app:test --tests "*MemberOpenApiIntegrationTest" --continue` (#27 CodeRabbit 반영, 수정 전 RED) | 실패(의도). member 10건 중 1 실패(재시도 직전 정지 → 500), app 1건 실패(PATCH 보안 요구사항 원소 2개) | 테스트 대역 `forcedUpdateRows` 보정(0만 강제, 성공은 실제 경로)과 재시도 닉네임 단언 추가 포함 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*MemberProfileServiceTest" :app:test --tests "*MemberOpenApiIntegrationTest" --tests "*AuthOpenApiIntegrationTest" --tests "*SignupOpenApiIntegrationTest" --continue` (수정 뒤 GREEN) | 성공(exit 0) | 기존 인증 API Spec 영향 없음 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#27 Phase 5 S5) | 성공(exit 0). member 282, app 152 통과 | |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#27 Phase 5 S6 재리뷰 반영 뒤 S5: 재시도 401 테스트, GET CSRF 없음 단언, Spec 주석) | 성공(exit 0). member 283, app 152 통과 | |
+| 2026-11-27 | `.\gradlew.bat :app:build` (#27 Phase 5 Commit 직전) | 성공(exit 0). WAR 2개, `:app:test` UP-TO-DATE(직전 --rerun 통과) | S10 0건, S7 미실행(사용자 Q1=a, PASS 아님) |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#27 Phase 5 S10 뒤 최종 S5) | 성공(exit 0). member 283, app 152 통과 | S10 0건, 코드 변경 없음 |
 
 - 미실행: 로컬 전체 `./gradlew clean build`(빌드 정책상 실행하지 않음).

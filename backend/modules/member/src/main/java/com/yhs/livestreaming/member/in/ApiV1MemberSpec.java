@@ -44,6 +44,7 @@ public interface ApiV1MemberSpec {
     ResponseEntity<MemberProfileResponse> getMyProfile(@Parameter(hidden = true) AuthenticatedMember me,
                                                        @Parameter(hidden = true) HttpServletResponse httpResponse);
 
+    // 아래 두 요구사항은 애너테이션만으로는 "또는"으로 나가므로, MemberOpenApiConfig가 "쿠키 그리고 CSRF" 하나로 합친다
     @Operation(summary = "닉네임 수정",
             description = "로그인한 회원 본인의 닉네임을 바꾸고 바뀐 내 정보를 돌려준다. 닉네임만 바꿀 수 있다(2~20자, 중복 허용). "
                     + "계정 상태 처리는 내 정보 조회와 같다.",

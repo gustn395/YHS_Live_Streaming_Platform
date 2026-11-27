@@ -46,6 +46,7 @@ public class MemberProfileService {
         if (members.updateNicknameOfActive(me.memberId(), nickname, clock.instant()) == 0) {
             requireActive(me); // ACTIVE가 아니면 세션을 폐기하고 여기서 끝난다
             if (members.updateNicknameOfActive(me.memberId(), nickname, clock.instant()) == 0) {
+                requireActive(me); // 재시도 사이에 정지·삭제됐으면 같은 규칙(세션 폐기·403/401)을 따른다
                 throw new IllegalStateException("닉네임 수정 중 회원 상태가 계속 바뀌었다");
             }
         }
