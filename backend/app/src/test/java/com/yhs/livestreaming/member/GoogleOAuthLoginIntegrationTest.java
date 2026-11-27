@@ -408,12 +408,22 @@ class GoogleOAuthLoginIntegrationTest {
         // 두 탭에서 서로 다른 Google 계정으로 콜백: 브라우저에 남는 Challenge가 무엇이든 그 Challenge의 회원으로만 끝난다
         GoogleUser bob = new GoogleUser("google-sub-bob", "bob@example.com", true, "밥");
         Cookie aliceChallenge = cookie(callback(start(), ALICE).getResponse(), MemberAuthCookies.OTP_CHALLENGE);
+        String aliceCode = mail.lastCodeFor("alice@example.com");
         Cookie bobChallenge = cookie(callback(start(), bob).getResponse(), MemberAuthCookies.OTP_CHALLENGE);
+        String bobCode = mail.lastCodeFor("bob@example.com");
 
-        assertThat(verifyOtp(aliceChallenge, mail.lastCodeFor("bob@example.com")).getStatus()).isEqualTo(401);
-        MockHttpServletResponse bobDone = verifyOtp(bobChallenge, mail.lastCodeFor("bob@example.com"));
+        // 두 회원의 OTP가 우연히 같을 수 있으므로 오답은 Alice 코드와 반드시 다른 값을 쓴다
+        assertThat(verifyOtp(aliceChallenge, "0000".equals(aliceCode) ? "1111" : "0000").getStatus()).isEqualTo(401);
+        if (!bobCode.equals(aliceCode)) { // 코드가 다를 때만: Bob의 OTP로 Alice Challenge를 인증할 수 없다
+            assertThat(verifyOtp(aliceChallenge, bobCode).getStatus()).isEqualTo(401);
+        }
+        MockHttpServletResponse aliceDone = verifyOtp(aliceChallenge, aliceCode);
+        MockHttpServletResponse bobDone = verifyOtp(bobChallenge, bobCode);
+        assertThat(aliceDone.getStatus()).isEqualTo(200);
         assertThat(bobDone.getStatus()).isEqualTo(200);
+        long aliceId = jdbc.queryForObject("SELECT id FROM members WHERE email = 'alice@example.com'", Long.class);
         long bobId = jdbc.queryForObject("SELECT id FROM members WHERE email = 'bob@example.com'", Long.class);
+        assertThat(aliceDone.getContentAsString(StandardCharsets.UTF_8)).contains("\"memberId\":" + aliceId);
         assertThat(bobDone.getContentAsString(StandardCharsets.UTF_8)).contains("\"memberId\":" + bobId);
     }
 
@@ -485,8 +495,15 @@ class GoogleOAuthLoginIntegrationTest {
         assertFailure(callback(start(), ALICE), "otp_delivery_failed");
         long id = jdbc.queryForObject("SELECT id FROM members", Long.class);
 
+        assertThat(mail.sent()).isEmpty();
+
         mail.failing(false);
-        callback(start(), ALICE);
+        MockHttpServletResponse retry = callback(start(), ALICE).getResponse();
+        assertThat(retry.getRedirectedUrl()).isEqualTo("/login/otp");
+        assertThat(setCookie(retry, MemberAuthCookies.OTP_CHALLENGE)).doesNotContain("Max-Age=0");
+        assertThat(mail.sent()).singleElement()
+                .satisfies(sent -> assertThat(sent.email()).isEqualTo("alice@example.com"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM members", Long.class)).isEqualTo(1L);
         assertThat(jdbc.queryForObject("SELECT id FROM members", Long.class)).isEqualTo(id);
     }
 

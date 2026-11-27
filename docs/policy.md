@@ -24,7 +24,7 @@
 - 비밀번호는 PBKDF2-HMAC-SHA256 + pepper로 해시하고 원문을 저장·로깅하지 않는다([MB-D006](member/decisions.md#1-확정-결정)).
 - 비밀 키는 용도별로 분리하고 기본값 없는 환경변수로만 받으며, 잘못되면 기동에 실패한다([MB-D007](member/decisions.md#1-확정-결정)).
 - username·이메일은 소문자로 정규화하고 중복이면 409다. 회원가입에서만 중복을 안내한다([MB-D008](member/decisions.md#1-확정-결정), [MB-D009](member/decisions.md#1-확정-결정)).
-- 로그인은 매번 비밀번호 1차 인증 → 이메일 OTP(4자리) → 토큰 발급이다. 인증 실패 응답은 계정 존재와 관계없이 같다([MB-D011](member/decisions.md#1-확정-결정), [MB-D015](member/decisions.md#1-확정-결정)).
+- LOCAL 로그인은 매번 비밀번호 1차 인증 → 이메일 OTP(4자리) → 토큰 발급이다(Google 로그인은 아래 Google 규칙). 인증 실패 응답은 계정 존재와 관계없이 같다([MB-D011](member/decisions.md#1-확정-결정), [MB-D015](member/decisions.md#1-확정-결정)).
 - Access Token은 HS256 JWT(15분), Refresh Token은 256비트 난수(7일 절대 만료, 해시만 저장)이고 HttpOnly·Secure·SameSite=Strict 쿠키로 전달한다([MB-D012](member/decisions.md#1-확정-결정)~[MB-D014](member/decisions.md#1-확정-결정)).
 - OTP 메일은 SMTP로 동기 발송하고 실패하면 503이다([MB-D016](member/decisions.md#1-확정-결정)).
 - 로그인 실패·회원 단위 OTP·IP 기준 요청 수를 제한하고(429), Redis를 쓸 수 없으면 인증 관련 요청을 503으로 거부한다([MB-D017](member/decisions.md#1-확정-결정)~[MB-D019](member/decisions.md#1-확정-결정)).

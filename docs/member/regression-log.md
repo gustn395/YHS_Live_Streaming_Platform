@@ -73,5 +73,12 @@
 | 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (#21 S6 반영 뒤 S5) | 성공(exit 0). global 54, member 257, app 128 통과 | app `application.yml` 환경변수 빈 기본값 제거 포함 |
 | 2026-11-27 | `.\gradlew.bat :app:build` (#21 Commit 직전) | 성공(exit 0). WAR 2개 생성 | 테스트는 직전 실행 결과 재사용(증분) |
 | 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (#21 S10·S7 뒤 최종 S5) + `:app:build` | 성공(exit 0). global 54, member 257, app 128 통과, build exit 0 | 코드 변경 없음(S10 0건) |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*MemberOAuthPropertiesTest" --tests "*OAuthRateLimitFilterTest" --tests "*GoogleAccountRepositoryAdapterTest" --continue` (#21 CodeRabbit 반영 RED) | 실패(의도). 3건: Google 엔드포인트 http 허용, context path가 있으면 시작을 LOGIN으로 셈, 만료 경계 활성화·재생성 동시 실행에서 PostgreSQL 교착(`CannotAcquireLockException`) | 커밋 9c02e7e 기준 |
+| 2026-11-27 | 같은 명령 + `:app:test --tests "*GoogleOAuthLoginIntegrationTest"` (#21 CodeRabbit 반영 GREEN) | 성공(exit 0) | 통합 테스트 2건 보강(SMTP 복구 뒤 재로그인, OTP 회원 격리)은 test-after |
+| 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (#21 CodeRabbit 반영 뒤 S5) | 성공(exit 0). global 54, member 261, app 128 통과 | |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*OAuthRateLimitFilterTest" --tests "*MemberOAuthPropertiesTest" --continue` (#21 S6 재리뷰 반영 RED) | 실패(의도). 1건: 퍼센트 인코딩된 시작 경로를 LOGIN 범위로 셈 | 대문자 host·[::1]·host 없음 사례는 처음부터 통과(test-after) |
+| 2026-11-27 | 같은 명령 + `:app:test --tests "*GoogleOAuthLoginIntegrationTest"` (#21 S6 재리뷰 반영 GREEN) | 성공(exit 0) | |
+| 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (#21 S6 재리뷰 반영 뒤 S5) | 성공(exit 0). global 54, member 262, app 128 통과 | |
+| 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (#21 Phase 5 S10 뒤 최종 S5) + `:app:build` | 성공(exit 0). global 54, member 262, app 128 통과, build exit 0 | S10 0건, 코드 변경 없음 |
 
 - 미실행: 로컬 전체 `./gradlew clean build`(빌드 정책상 실행하지 않음).

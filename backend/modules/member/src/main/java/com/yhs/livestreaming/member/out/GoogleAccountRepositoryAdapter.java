@@ -68,27 +68,24 @@ public class GoogleAccountRepositoryAdapter implements GoogleAccountRepository {
 
     @Override
     public int activatePending(long memberId, String email, Instant createdAfter, Instant now) {
-        return tx.execute(status -> {
-            int rows = members.activatePendingWithEmail(memberId, email, createdAfter, now, AccountType.GOOGLE,
-                    AccountStatus.PENDING, AccountStatus.ACTIVE);
-            return withLinkEmail(status, rows, memberId, email);
-        });
+        return tx.execute(status -> linkThenMember(status, memberId, email,
+                () -> members.activatePendingWithEmail(memberId, email, createdAfter, now, AccountType.GOOGLE,
+                        AccountStatus.PENDING, AccountStatus.ACTIVE)));
     }
 
     @Override
     public int updateActiveEmail(long memberId, String email, Instant now) {
-        return tx.execute(status -> {
-            int rows = members.updateEmailOfActive(memberId, email, now, AccountType.GOOGLE, AccountStatus.ACTIVE);
-            return withLinkEmail(status, rows, memberId, email);
-        });
+        return tx.execute(status -> linkThenMember(status, memberId, email,
+                () -> members.updateEmailOfActive(memberId, email, now, AccountType.GOOGLE, AccountStatus.ACTIVE)));
     }
 
-    /** 회원 행이 바뀌었으면 연결 행도 정확히 1행 바뀌어야 한다. 아니면 회원 변경까지 롤백하고 0을 돌려준다. */
-    private int withLinkEmail(TransactionStatus status, int memberRows, long memberId, String email) {
-        if (memberRows != 1) {
-            return memberRows;
-        }
-        if (links.updateEmail(memberId, OAuthAccount.GOOGLE, email) != 1) {
+    /**
+     * 연결 행 → 회원 행 순서로 갱신한다. {@link #replaceExpiredPending}(연결 → 회원 삭제)과 잠금 순서를 맞춰 만료 경계의 동시
+     * 활성화·재생성이 교착되지 않게 한다. 둘 다 정확히 1행이어야 하고, 아니면 전체 롤백 뒤 0을 돌려준다.
+     */
+    private int linkThenMember(TransactionStatus status, long memberId, String email,
+                               java.util.function.IntSupplier memberUpdate) {
+        if (links.updateEmail(memberId, OAuthAccount.GOOGLE, email) != 1 || memberUpdate.getAsInt() != 1) {
             status.setRollbackOnly();
             return 0;
         }

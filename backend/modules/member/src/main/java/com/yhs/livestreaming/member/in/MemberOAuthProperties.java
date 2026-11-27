@@ -1,6 +1,7 @@
 package com.yhs.livestreaming.member.in;
 
 import java.net.URI;
+import java.util.Locale;
 import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -55,9 +56,13 @@ public record MemberOAuthProperties(String publicBaseUrl, String otpRedirect, St
             }
             clientId = clientId.strip();
             clientSecret = clientSecret.strip();
-            authorizationUri = orDefault(authorizationUri, "https://accounts.google.com/o/oauth2/v2/auth");
-            tokenUri = orDefault(tokenUri, "https://www.googleapis.com/oauth2/v4/token");
-            jwkSetUri = orDefault(jwkSetUri, "https://www.googleapis.com/oauth2/v3/certs");
+            // Token Endpoint에는 Client Secret이, JWKS에는 서명 검증 키가 오간다: https만(http는 loopback 테스트 공급자만)
+            authorizationUri = requireSecureEndpoint(
+                    orDefault(authorizationUri, "https://accounts.google.com/o/oauth2/v2/auth"), "authorization-uri");
+            tokenUri = requireSecureEndpoint(orDefault(tokenUri, "https://www.googleapis.com/oauth2/v4/token"),
+                    "token-uri");
+            jwkSetUri = requireSecureEndpoint(orDefault(jwkSetUri, "https://www.googleapis.com/oauth2/v3/certs"),
+                    "jwk-set-uri");
             issuerUri = orDefault(issuerUri, "https://accounts.google.com");
         }
 
@@ -90,10 +95,29 @@ public record MemberOAuthProperties(String publicBaseUrl, String otpRedirect, St
             throw new IllegalArgumentException("MEMBER_OAUTH_PUBLIC_BASE_URL은 경로 없는 http(s) 출처여야 한다");
         }
         // __Host-yhs_oauth는 Secure 쿠키라 브라우저가 loopback 밖의 http 출처에서는 저장하지 않는다
-        if (!"https".equalsIgnoreCase(uri.getScheme()) && !LOOPBACK_HOSTS.contains(uri.getHost().toLowerCase())) {
+        if (!httpsOrLoopbackHttp(uri)) {
             throw new IllegalArgumentException("MEMBER_OAUTH_PUBLIC_BASE_URL은 https여야 한다(http는 localhost·127.0.0.1·[::1]만)");
         }
         return trimmed;
+    }
+
+    private static String requireSecureEndpoint(String value, String name) {
+        URI uri;
+        try {
+            uri = URI.create(value);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("member.oauth.google." + name + " 형식이 잘못됐다");
+        }
+        if (uri.getHost() == null || !httpsOrLoopbackHttp(uri)) {
+            throw new IllegalArgumentException(
+                    "member.oauth.google." + name + "는 https 절대 URL이어야 한다(http는 localhost·127.0.0.1·[::1]만)");
+        }
+        return value;
+    }
+
+    private static boolean httpsOrLoopbackHttp(URI uri) {
+        return "https".equalsIgnoreCase(uri.getScheme())
+                || "http".equalsIgnoreCase(uri.getScheme()) && LOOPBACK_HOSTS.contains(uri.getHost().toLowerCase(Locale.ROOT));
     }
 
     private static final Set<String> LOOPBACK_HOSTS = Set.of("localhost", "127.0.0.1", "[::1]");

@@ -64,6 +64,22 @@ class MemberOAuthPropertiesTest {
     }
 
     @Test
+    void googleEndpointsMustBeHttpsOrLoopbackHttp() { // Token Endpoint에는 Client Secret이 실린다
+        for (String key : new String[] {"authorization-uri", "token-uri", "jwk-set-uri"}) {
+            for (String bad : new String[] {"http://oauth.example.com/x", "ftp://oauth.example.com/x", "/relative",
+                    "https:///x"}) {
+                runner.withPropertyValues(VALID).withPropertyValues("member.oauth.google." + key + "=" + bad)
+                        .run(context -> assertThat(context).as(key + "=" + bad).hasFailed());
+            }
+            for (String ok : new String[] {"https://oauth.example.com/x", "http://127.0.0.1:9/x", "http://localhost:9/x",
+                    "http://LOCALHOST:9/x", "http://[::1]:9/x"}) {
+                runner.withPropertyValues(VALID).withPropertyValues("member.oauth.google." + key + "=" + ok)
+                        .run(context -> assertThat(context).as(key + "=" + ok).hasNotFailed());
+            }
+        }
+    }
+
+    @Test
     void fixedRedirectsMustBeSafeSameOriginPaths() {
         for (String bad : new String[] {"https://evil.example/", "//evil.example", "/\\evil.example", "login",
                 "javascript:alert(1)", "/login?x=1", "/login#x", "/log\nin"}) {

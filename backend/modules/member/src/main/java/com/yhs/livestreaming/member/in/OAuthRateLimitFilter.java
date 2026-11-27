@@ -10,6 +10,9 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
@@ -18,6 +21,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * 상태는 건드리지 않는다). OAuth 보안 체인에서 {@code new}로 한 번만 등록한다(Bean이 아니므로 서블릿 필터로 따로 등록되지 않음).
  */
 class OAuthRateLimitFilter extends OncePerRequestFilter {
+
+    private static final RequestMatcher START =
+            PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, MemberOAuthProperties.START_PATH);
 
     private final RequestRateLimiter limiter;
     private final OAuthRedirects redirects;
@@ -30,8 +36,8 @@ class OAuthRateLimitFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        RateLimitScope scope = MemberOAuthProperties.START_PATH.equals(request.getRequestURI())
-                ? RateLimitScope.OAUTH_START : RateLimitScope.LOGIN;
+        // 보안 체인과 같은 matcher로 고른다: context path를 빼고 디코딩한 앱 내부 경로 기준
+        RateLimitScope scope = START.matches(request) ? RateLimitScope.OAUTH_START : RateLimitScope.LOGIN;
         try {
             limiter.acquire(scope, ClientIp.of(request));
         } catch (TooManyRequestsException ex) {

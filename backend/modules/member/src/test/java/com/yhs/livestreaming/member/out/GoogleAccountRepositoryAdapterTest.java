@@ -261,6 +261,32 @@ class GoogleAccountRepositoryAdapterTest {
         assertThat(jdbc.queryForObject("SELECT account_status FROM members", String.class)).isEqualTo("PENDING");
     }
 
+    @Test
+    void activationAndReplacementAtTheExpiryBoundaryNeverDeadlockAndExactlyOneWins() throws Exception {
+        // 만료 경계: 활성화는 "아직 유효", 재생성은 "이미 만료"로 볼 수 있는 시각을 각각 넘겨 두 조건이 동시에 맞게 한다.
+        // 두 쪽이 같은 순서(연결 행 → 회원 행)로 잠가야 교착 없이 한쪽만 이긴다(CodeRabbit, MB-D025).
+        for (int round = 0; round < 30; round++) {
+            clean();
+            Member old = repository.create(Member.registerGoogle("old@example.com", "옛사람"), SUB, "old@example.com");
+            Instant createdAt = jdbc.queryForObject("SELECT created_at FROM members WHERE id = ?", java.sql.Timestamp.class,
+                    old.getId()).toInstant();
+            Instant now = Instant.now();
+
+            List<Object> results = runConcurrently(2, i -> i == 0
+                    ? repository.activatePending(old.getId(), "old@example.com", createdAt.minusSeconds(1), now)
+                    : repository.replaceExpiredPending(old.getId(), SUB, createdAt.plusSeconds(1),
+                            Member.registerGoogle("new@example.com", "새사람"), "new@example.com"));
+
+            boolean activated = Integer.valueOf(1).equals(results.get(0));
+            boolean replaced = ((Optional<?>) results.get(1)).isPresent();
+            assertThat(activated ^ replaced).as("round %d: 활성화=%s 재생성=%s", round, activated, replaced).isTrue();
+            assertThat(count("members")).isEqualTo(1L);
+            assertThat(count("member_oauth_accounts")).isEqualTo(1L);
+            assertThat(jdbc.queryForObject("SELECT account_status FROM members", String.class))
+                    .isEqualTo(activated ? "ACTIVE" : "PENDING");
+        }
+    }
+
     private void ageMember(long id, Duration age) {
         jdbc.update("UPDATE members SET created_at = now() - (? * interval '1 second') WHERE id = ?",
                 age.toSeconds(), id);
