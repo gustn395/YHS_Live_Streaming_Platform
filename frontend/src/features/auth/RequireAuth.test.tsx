@@ -15,7 +15,7 @@ function renderGuard(state: AuthState<unknown>, retry = vi.fn(), initialEntry = 
     { initialEntries: [initialEntry] },
   );
   render(
-    <AuthContext value={{ state, retry }}>
+    <AuthContext value={{ state, retry, completeLogin: vi.fn() }}>
       <RouterProvider router={router} />
     </AuthContext>,
   );
@@ -68,14 +68,14 @@ describe('RequireAuth', () => {
     router.subscribe((s) => navigations.push(s.location.pathname));
     const authed: AuthState<unknown> = { status: 'authenticated', epoch: 1, principal: {} };
     const { rerender } = render(
-      <AuthContext value={{ state: authed, retry: vi.fn() }}>
+      <AuthContext value={{ state: authed, retry: vi.fn(), completeLogin: vi.fn() }}>
         <RouterProvider router={router} />
       </AuthContext>,
     );
     const lost: AuthState<unknown> = { status: 'unauthenticated', epoch: 2, reason: 'sessionLost' };
     await act(async () => {
       rerender(
-        <AuthContext value={{ state: lost, retry: vi.fn() }}>
+        <AuthContext value={{ state: lost, retry: vi.fn(), completeLogin: vi.fn() }}>
           <RouterProvider router={router} />
         </AuthContext>,
       );

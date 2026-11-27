@@ -28,7 +28,8 @@ describe('앱 라우팅', () => {
     const router = renderApp('/app');
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
     expect(new URLSearchParams(router.state.location.search).get('from')).toBe('/app');
-    expect(screen.getByRole('heading', { name: '로그인' })).toBeInTheDocument();
+    // 라우터 상태는 화면 커밋보다 먼저 바뀐다. 동기 조회(getBy)는 드물게 커밋 전 DOM을 본다(FE-04 S4, 300회 중 1~3%)
+    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument();
   });
 
   it('/forbidden 은 권한 없음 화면이다', async () => {

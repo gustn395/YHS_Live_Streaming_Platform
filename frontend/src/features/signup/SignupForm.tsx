@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { ApiClient } from '../../shared/api/apiClient';
 import { isApiError, type ApiFailure } from '../../shared/api/apiError';
 import { presentApiFailure } from '../../shared/api/errorPresentation';
+import { deadlineAfter, remainingUntil, waitUntil } from '../../shared/time/deadline';
 import { submitSignup, type SignupResult } from './signupApi';
 import styles from './SignupForm.module.css';
 import {
@@ -53,23 +54,6 @@ const TEXT = {
   tooManyWithTime: (minutes: number) => `요청이 많습니다. 약 ${minutes}분 뒤 다시 시도해 주세요.`,
   tooMany: '요청이 많습니다. 잠시 뒤 다시 시도해 주세요.',
 } as const;
-
-/** 브라우저 setTimeout 최대 지연(2^31-1ms). 넘으면 즉시 실행되므로 마감 시각까지 나눠 기다린다. */
-const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
-
-/**
- * 지금부터 seconds초 뒤의 마감 시각(ms). 이벤트 처리 중에만 부른다.
- * Date.now(벽시계)를 쓴다: performance.now는 플랫폼에 따라 절전 중 멈춰 서버 기준으로 풀린 뒤에도 버튼을 막을 수 있다.
- * 시스템 시각을 바꾸면 흔들리지만, 이 대기는 안내용이고 최종 판단은 서버다(FE-D025, FE-D032).
- */
-function deadlineAfter(seconds: number): number {
-  return Date.now() + seconds * 1000;
-}
-
-/** 마감 시각까지 남은 시간(ms). 0 이하면 지났다. */
-function remainingUntil(deadline: number): number {
-  return deadline - Date.now();
-}
 
 /**
  * Backend가 판정에 쓰는 값(정규화한 전송 값). 늦게 온 서버 오류가 아직 같은 입력에 대한 것인지 비교할 때 쓴다.
@@ -132,12 +116,13 @@ export function SignupForm({ client, onSuccess }: { client: ApiClient; onSuccess
   const blockedUntilRef = useRef(0);
   const inputs = useRef<Partial<Record<SignupField, HTMLInputElement | null>>>({});
   const abortRef = useRef<AbortController | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 429 대기 취소 함수(공용 마감 대기, FE-D040 (3)). */
+  const cancelWaitRef = useRef<(() => void) | null>(null);
 
   useEffect(
     () => () => {
       abortRef.current?.abort();
-      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      cancelWaitRef.current?.();
     },
     [],
   );
@@ -227,17 +212,11 @@ export function SignupForm({ client, onSuccess }: { client: ApiClient; onSuccess
   function blockUntil(seconds: number) {
     blockedUntilRef.current = deadlineAfter(seconds);
     setBlocked(true);
-    const check = () => {
-      const remaining = remainingUntil(blockedUntilRef.current);
-      if (remaining <= 0) {
-        timerRef.current = null;
-        setBlocked(false);
-        return;
-      }
-      timerRef.current = setTimeout(check, Math.min(remaining, MAX_TIMER_DELAY_MS));
-    };
-    if (timerRef.current !== null) clearTimeout(timerRef.current);
-    check();
+    cancelWaitRef.current?.();
+    cancelWaitRef.current = waitUntil(blockedUntilRef.current, () => {
+      cancelWaitRef.current = null;
+      setBlocked(false);
+    });
   }
 
   function showFailure(failure: ApiFailure, submitted: SignupInput) {

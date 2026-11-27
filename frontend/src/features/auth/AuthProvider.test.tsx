@@ -456,6 +456,98 @@ describe('재시도·재초기화', () => {
   });
 });
 
+// FE-T032: 로그인 성공 전환은 Reducer와 세대 관리(sessionScope)를 같은 세대로 함께 올린다(FE-D034, FE-D011)
+describe('로그인 성공 전환(completeLogin)', () => {
+  function LoginProbe({ log, principal, results }: { log: AuthState<unknown>[]; principal: unknown; results: boolean[] }) {
+    const { state, completeLogin } = useAuth();
+    if (log.at(-1) !== state) log.push(state);
+    return (
+      <div>
+        <span data-testid="status">{state.status}</span>
+        <button type="button" onClick={() => results.push(completeLogin(principal))}>
+          login
+        </button>
+      </div>
+    );
+  }
+
+  function renderLogin(adapter: AuthAdapter<unknown>, principal: unknown = { memberId: 7 }) {
+    const log: AuthState<unknown>[] = [];
+    const results: boolean[] = [];
+    const client = createApiClient();
+    const utils = render(
+      <AuthProvider adapter={adapter} client={client}>
+        <LoginProbe log={log} principal={principal} results={results} />
+      </AuthProvider>,
+    );
+    const login = () => act(() => screen.getByRole('button', { name: 'login' }).click());
+    return { ...utils, log, results, client, login };
+  }
+
+  it('미인증에서 authenticated가 되고 세대를 1 올린다', async () => {
+    const { log, results, login } = renderLogin(unavailableAuthAdapter);
+    await waitFor(() => expect(status()).toBe('unauthenticated'));
+    login();
+    expect(results).toEqual([true]);
+    expect(log.at(-1)).toEqual({ status: 'authenticated', epoch: 1, principal: { memberId: 7 } });
+  });
+
+  it('초기화 중이면 반영하지 않고 false를 돌려준다', async () => {
+    const pending: AuthAdapter<unknown> = { initialize: () => new Promise(() => {}) };
+    const { results, login } = renderLogin(pending);
+    login();
+    expect(results).toEqual([false]);
+    expect(status()).toBe('initializing');
+  });
+
+  it('로그인 전 세대의 session 요청은 취소된다', async () => {
+    const { client, login } = renderLogin(unavailableAuthAdapter);
+    await waitFor(() => expect(status()).toBe('unauthenticated'));
+    server.use(
+      http.get('*/api/v1/slow', async () => {
+        await delay(100);
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const before = client.request({ method: 'get', path: '/v1/slow', authScope: 'session' }).catch((e: unknown) => e);
+    login();
+    const result = await before;
+    expect(result).toBeInstanceOf(ApiError);
+    expect((result as ApiError).failure).toEqual({ kind: 'canceled' });
+  });
+
+  it('로그인 뒤 세션 상실 401이 같은 세대로 반영된다(Reducer와 세대 관리 일치)', async () => {
+    const { client, log, login } = renderLogin(unavailableAuthAdapter);
+    await waitFor(() => expect(status()).toBe('unauthenticated'));
+    login();
+    server.use(
+      http.get('*/api/v1/private', () =>
+        HttpResponse.json({ code: 'AUTH_UNAUTHENTICATED' }, { status: 401, headers: PROBLEM }),
+      ),
+    );
+    await act(async () => {
+      await client.request({ method: 'get', path: '/v1/private', authScope: 'session' }).catch(() => {});
+    });
+    expect(log.at(-1)).toEqual({ status: 'unauthenticated', epoch: 2, reason: 'sessionLost' });
+  });
+
+  it('인증 상태에서 다시 로그인하면 주체를 바꾸고 세대를 1 올린다', async () => {
+    server.use(http.get(ME, () => HttpResponse.json({ memberId: 'm-1' })));
+    const client = createApiClient();
+    const log: AuthState<unknown>[] = [];
+    const results: boolean[] = [];
+    render(
+      <AuthProvider adapter={createProvisionalAuthAdapter(client)} client={client}>
+        <LoginProbe log={log} principal={{ memberId: 9 }} results={results} />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(status()).toBe('authenticated'));
+    act(() => screen.getByRole('button', { name: 'login' }).click());
+    expect(results).toEqual([true]);
+    expect(log.at(-1)).toEqual({ status: 'authenticated', epoch: 2, principal: { memberId: 9 } });
+  });
+});
+
 describe('useAuth', () => {
   it('Provider 밖에서 쓰면 오류', () => {
     const Bad = () => {

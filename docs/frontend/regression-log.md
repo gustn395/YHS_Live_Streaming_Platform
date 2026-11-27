@@ -328,3 +328,67 @@ Backend 기준을 `origin/main`(`cea2deb`, BE-04 #19 포함)이 아닌 `d47736c`
 - S6 반영(문서 3건) 뒤 S5 재실행: lint·typecheck 0, 23파일 397건 통과, build 0, 보이지 않는 문자 0건, `git diff --check` 오류 없음.
 - S7(이해도 퀴즈)은 사용자 결정으로 생략했다(질문 1/6만 출제, 답 없음). Skill 게이트 확인은 S7 미완료 1건으로 종료 코드 1이다.
 - 미실행: 실제 Backend 연동(FE-D033 (5)에 따라 코드 비교 + Vitest 전체로 대신함), 안내 문구의 브라우저 표시 확인.
+
+### 2026-11-27 FE-04(Issue #26) 로그인·이메일 OTP 화면·로컬 E2E — 브랜치 `feature/26-frontend-login-otp`, 기준 커밋 8953906 + 작업 트리(커밋 전)
+
+대상: [FE-D034](decisions.md#1-확정-결정)~[FE-D040](decisions.md#1-확정-결정). 모두 Claude가 실행했다. 바로 아래 표의 단계는 Backend·Docker 컨테이너 없이 실행했다. 실제 Backend를 쓴 E2E는 그다음 "E2E 실행" 표에 따로 적었다.
+
+| 단계 | 명령 | 결과 |
+| --- | --- | --- |
+| 설치 | `npm ci` | 293 packages |
+| RED 인증 상태 | `npx vitest run src/features/auth/authState.test.ts` | 5건 실패(이벤트 미처리 → `undefined`) |
+| RED Provider | `npx vitest run src/features/auth/AuthProvider.test.tsx` | 5건 실패(`completeLogin is not a function`) |
+| RED API 계약 | `npx vitest run src/features/login src/features/otp` | 모듈 없음 → 셸 뒤 24건 실패(`미구현`) |
+| RED 공용 대기 | `npx vitest run src/shared/time` | 7건 실패 |
+| 리팩터링 확인 | `npx vitest run src/features/signup src/app` | SignupForm을 공용 대기로 바꾼 뒤 기존 테스트 무수정 149건 통과 |
+| Mutation | `waitUntil` 완료 조건을 `remaining <= 120_000`으로 임시 변경 뒤 `SignupForm.test.tsx`, 복원 | 429 대기 2건 실패 → 복원 뒤 통과(기존 테스트가 리팩터링 경로를 검증함) |
+| RED 로그인 폼·Google 오류 | `npx vitest run src/features/login` | 셸에서 30건 실패 |
+| RED OTP 폼 | `npx vitest run src/features/otp/OtpForm.test.tsx` | 셸에서 22건 실패. 구현 뒤 2건 실패: ① `maxLength=4`가 숫자를 거르기 전 붙여넣은 원문을 잘라 `"04"`가 됨(실제 결함, `maxLength` 제거) ② 남은 타이머 1개는 MSW `delay` 타이머(테스트 결함, 검사를 둘로 나눔). 테스트 헬퍼가 가짜 타이머 없이 `advanceTimers`를 넘기던 결함도 수정 |
+| RED 페이지·라우터 | `npx vitest run src/app/pages/LoginPage.test.tsx` | 셸에서 13건 실패. 테스트 기대 1건 수정: 안전하지 않은 `from`은 FE-D012대로 `/`(처음 테스트가 `/app`을 기대함) |
+| GREEN 정적 검사 | `npm run lint` / `npm run typecheck` | 1차 실패: lint `react-refresh/only-export-components` 3건(컴포넌트 파일의 문구 상수 → `loginText.ts`·`otpText.ts`·`loginPageText.ts`로 분리), typecheck `RequireAuth.test.tsx` Context 값에 `completeLogin` 없음 3건(타입만 추가). 수정 뒤 종료 0 / 0 |
+| GREEN 전체 | `npm test` | 30파일 505건 통과 |
+| 빌드 | `npm run build` | 종료 0, check-dist 가안 표지 없음 |
+| Playwright 설치 | `npm install -D --save-exact @playwright/test@1.65.0` | 1.65.0(2026-11-05 공개, `node >=20`, 의존 `playwright` 1.65.0, peer 없음). 1.65.1은 2026-11-13 공개라 14일 미만(FE-D008)이어서 쓰지 않음. lockfile +46행 |
+| audit | `npm audit --omit=dev --audit-level=high` / `npm audit` | 운영 0건 / 전체 moderate 9(모두 기존 FE-D015 lint 체인, Playwright 관련 없음) |
+| 브라우저 | `npx playwright install chromium` | 사용자 캐시(`%LOCALAPPDATA%\ms-playwright`)에 설치, 저장소 변경 없음 |
+| E2E 구성 확인 | `npx playwright test --list` | 3건(E2E-01~03) |
+| E2E 빠른 실패 | 환경변수 없이 / 없는 서버(`127.0.0.1:1`)로 `npx playwright test` | "E2E 환경변수 E2E_BASE_URL가 없습니다…" / "E2E 환경 미기동: Frontend dev 서버에 연결할 수 없습니다…"로 테스트 전 중단 |
+| Compose 확인 | `docker compose -p yhs-e2e -f infrastructure/docker/e2e/compose.yml config --quiet`(임시 비밀번호 값 있음/없음) | 종료 0 / `required variable E2E_POSTGRES_PASSWORD is missing a value`. 컨테이너는 띄우지 않음 |
+| 이미지 확인 | `docker image inspect`(로컬 이미지) | postgres `/var/lib/postgresql/data`·redis `/data` 익명 볼륨 선언, mailpit 볼륨 없음·내장 healthcheck `/mailpit readyz` |
+
+**E2E 실행 (2026-11-27, 사용자 승인 "E2E 승인합니다", 자동 — Playwright 1.65.0 Chromium)**
+
+환경: fe04 작업 트리(기준 커밋 8953906 + 커밋 전 변경). Backend는 fe04 `backend/` `:app:bootRun --no-daemon`(포트 18080), Frontend `npm run dev`(5173,
+프록시 대상 `http://127.0.0.1:18080`), 서버 묶음은 `infrastructure/docker/e2e/compose.yml`(`yhs-e2e`). 비밀 값(DB 비밀번호, JWT·OTP HMAC·pepper 키, 더미
+Google ID·Secret)은 Python `secrets`로 만들어 세션 전용 임시 폴더의 파일에만 두었다가(명령이 여러 번이라 같은 값이 필요) 끝난 뒤 지웠다. 값은 출력·기록하지 않았다.
+가입은 Backend 설정대로 실제 HIBP를 호출했다. 보안 설정·Rate Limit은 바꾸지 않았다.
+
+| 단계 | 명령 | 결과 |
+| --- | --- | --- |
+| 사전 | 포트 15432·16379·11025·18025·18080·5173 확인 | 모두 비어 있음, `yhs-e2e` 프로젝트 없음 |
+| 1회차 기동 | `docker compose -p yhs-e2e -f infrastructure/docker/e2e/compose.yml down -v` → `up -d --wait` → bootRun → dev | 3개 healthy, health UP, 프록시 경유 `/csrf` 204 |
+| 1회차 | `npm --prefix frontend run e2e`(Full) | **3건 통과**(E2E-01 7.3초, E2E-02 5.6초, E2E-03 1.1분, 합계 1.4분) |
+| E2E-ENV 초기화 | bootRun 종료 → `down -v` → `yhs-e2e` 볼륨 0개 확인 → `up -d --wait` → bootRun | Flyway `Successfully applied 1 migration`(빈 DB에서 다시 적용), `/csrf` 204 |
+| 2회차 | `npm --prefix frontend run e2e`(Full) | **3건 통과**(9.0초, 6.6초, 1.1분, 합계 1.4분) |
+| 정리 | bootRun·dev 종료 → `down -v` → 남은 것 확인 | 컨테이너 0·볼륨 0. 5173에 남은 Vite node 프로세스(fe04 `vite.js` 확인) 1개를 종료한 뒤 포트 6개 모두 비어 있음. 비밀 값 파일 삭제 |
+
+- E2E-ENV: 통과(`down -v`를 사이에 둔 2회 모두 통과, 끝난 뒤 `yhs-e2e` 컨테이너·볼륨 0개). Playwright 결과물은 실패가 없어 남지 않았고 저장소 안에도 없다.
+- 관찰: bootRun 뒤 `backend/build-logic/.kotlin/`(Gradle Kotlin 세션 데이터)가 추적 외 파일로 생겼다. `.gitignore`에 없다. 지우지 않았고 커밋 대상이 아니다(후속 검토, 규칙 파일 변경은 승인 필요).
+- 미실행: M-03(수동, 실제 Google 로그인 포함, 별도 승인), Safari.
+
+**S6 자체 리뷰 반영 (2026-11-27, 사용자 결정 리뷰 Q1=a·Q2=a·Q3=a, [FE-D042](decisions.md#1-확정-결정))**
+
+S6(Standards·Spec) 지적 12건 중 수용 1·2·4·5·6·8, Q1(로그인·OTP 공용 훅·실패 분류·공통 문구, SignupForm 제외), Q2, Q3를 반영했다. 지적 11은 거부, 12는 PR 본문 대상. S10은 0건.
+
+| 단계 | 명령 | 결과 |
+| --- | --- | --- |
+| RED | `npx vitest run src/app/pages` | 5건 실패(기대한 이유): Q2 `completeLogin` false 안내·다시 로그인 링크 2건(`Unable to find role="alert"`·`role="link"`), Q3 사유 history state 3건(`expected { notice: … } to be null`) |
+| 리팩터링·GREEN | `npx vitest run src/app src/features/login src/features/otp src/shared` | 20파일 251건 통과(공용 `formFailure`·`formFeedback`·`FormBanner`·`commonText`, 스타일 `shared/ui`로 이동, `RESEND_INTERVAL_SECONDS` → `otpApi.ts`, 사유 목록 `OTP_RESTART_REASONS`). `formFailure.test.ts`는 추출과 함께 쓴 특성 테스트(처음부터 통과, RED 아님) |
+| Mutation | `OtpPage`의 `completeLogin` 결과 확인 제거 뒤 `OtpPage.test.tsx`, 복원 | 1건 실패 → 복원 뒤 2건 통과 |
+| 전체 | `npm run lint` / `npm run typecheck` / `npm test` / `npm run build` | 0 / 0 / 32파일 520건 통과 / 0(check-dist 가안 표지 없음) |
+| S5 재검증 | 같은 4개 명령, `git diff --check`, 변경 46파일 보이지 않는 문자·줄 끝 공백·비밀 값 패턴 | 0 / 0 / 520건 통과 / 0, 오류 없음, 0건 |
+| S6 재리뷰 반영 | 지적 1~6 수용(배너 `FormBanner` 공용 사용, history state 타입 `loginFlowState.ts`, module 60초 → 상수 이름, `retryMinutes` → `shared/time`, 다시 로그인 링크 `from` 유지, 확인 429 테스트에 재발송 활성 단언), 7·9 거부, 8 오탐(`safeRedirect`가 `/login` 하위를 `/`로 바꿈). RED: `npx vitest run src/app/pages/OtpPage.test.tsx` 1건 실패(링크 `href`가 `/login`) → GREEN 3건 | 전체 lint 0, typecheck 0, 32파일 522건 통과, build 0 |
+| S5 재검증 중 간헐 실패 → S4 | `npm test`(전체) | 1건 실패: `router.test.tsx` "인증 필요 경로 /app 은 미인증이면 /login?from=/app 으로 간다"(105ms, 상세 메시지는 남기지 않음). 단독 10회·동시 부하 24회·전체 6회 재현 0. 측정: 이 테스트는 평소 49~72ms라 `waitFor` 1초 초과는 아님(기각). 임시 진단 테스트(`[DEBUG-fe04r]`, 삭제 확인)로 "`router.state`가 `/login`이 된 직후 로그인 제목이 DOM에 아직 없는" 경합을 300회 중 3·4·10회 재현, 기다렸다가 찾으면(`findByRole`) 0회 |
+| S4 원인·수정 | 테스트만 수정 | 원인: 라우터 상태가 화면 커밋보다 먼저 바뀌는데 테스트가 바로 `getBy`로 동기 조회. 제품 결함 아님. 같은 패턴 3곳을 기다렸다가 찾도록 바꿈: `router.test.tsx:31`, `LoginPage.test.tsx`(인증 표시), FE-03 테스트 `SignupPage.test.tsx:78`. 이번 LoginPage가 이전 Placeholder보다 무거워 드러난 것으로 추정(이전 코드와 비교 측정은 하지 않음) |
+| S5 재검증 | `npm run lint` / `typecheck` / `npm test` 3회 / `build`, `git diff --check`, 변경 파일 스캔 | 0 / 0 / 522건 통과 3회 / 0, 오류 없음, 보이지 않는 문자·줄 끝 공백·비밀 값 0 |
+| E2E 재실행(사용자 지시) | 위 "E2E 실행"과 같은 절차(새 비밀 값, `down -v` → `up -d --wait` → bootRun → dev → `npm --prefix frontend run e2e`) | **3건 통과**(7.7초, 6.0초, 1.1분, 합계 1.4분). 정리: `down -v` 뒤 컨테이너 0·볼륨 0, 남은 fe04 Vite node 1개 종료, 포트 6개 해제, 비밀 값 파일 삭제 |
