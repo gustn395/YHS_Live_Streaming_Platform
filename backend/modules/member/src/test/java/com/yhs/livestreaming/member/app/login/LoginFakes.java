@@ -33,6 +33,7 @@ final class LoginFakes {
         final Map<Long, Member> byId = new HashMap<>();
         final List<String> rehashed = new ArrayList<>();
         RuntimeException rehashFailure;
+        RuntimeException findFailure;
         int activateRows = -1; // -1: 실제처럼 PENDING·만료 전이면 1
         int activateCalls;
         Runnable onActivate;
@@ -64,6 +65,9 @@ final class LoginFakes {
 
         @Override
         public Optional<Member> findById(long id) {
+            if (findFailure != null) {
+                throw findFailure;
+            }
             return Optional.ofNullable(byId.get(id));
         }
 

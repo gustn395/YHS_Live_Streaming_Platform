@@ -7,7 +7,7 @@
 
 - 오류 응답은 ProblemDetail(RFC 9457) + `code` + `errors[]` 형식이다. Spring Security의 401·403도 같다. 성공 응답은 감싸지 않는다([G-D003](#3-공통-결정-이력)).
 - 보안 체인은 stateless다. 각 모듈이 등록한 공개 경로, `/actuator/health`, 개발·테스트의 Swagger만 인증 없이 허용하고 나머지는 인증이 필요하다([G-D004](#3-공통-결정-이력), [G-D011](#3-공통-결정-이력)).
-- CSRF는 SPA 이중 제출 방식(`XSRF-TOKEN` 쿠키 + `X-XSRF-TOKEN` 헤더)으로 막고, 로그인·가입·OTP 같은 공개 상태 변경 API도 보호한다. CSRF 보호가 꺼진 상태로는 쿠키 기반 인증을 도입하거나 외부에 공개하지 않는다([G-D005](#3-공통-결정-이력), [G-D014](#3-공통-결정-이력)).
+- CSRF는 SPA 이중 제출 방식(`XSRF-TOKEN` 쿠키 + `X-XSRF-TOKEN` 헤더)으로 막고, 로그인·가입·OTP 같은 공개 상태 변경 API도 보호한다. CSRF 보호가 꺼진 상태로는 쿠키 기반 인증을 도입하거나 외부에 공개하지 않는다([G-D005](#3-공통-결정-이력), [G-D014](#3-공통-결정-이력)). CSRF 토큰은 로그인 최종 성공과 로그아웃 때 새로 만들고, Refresh 때는 유지한다([G-D014](#3-공통-결정-이력), [MB-D020](member/decisions.md#1-확정-결정), [MB-D022](member/decisions.md#1-확정-결정)).
 - Boot 기본 계정·HTTP Basic·폼 로그인을 쓰지 않는다([G-D013](#3-공통-결정-이력)).
 - 다른 모듈은 현재 회원을 `@CurrentMember`(`AuthenticatedMember`)로 받는다([G-D006](#3-공통-결정-이력)).
 - springdoc 문서·Swagger UI는 운영 기본값이 비활성이다([G-D008](#3-공통-결정-이력)). springdoc은 Boot와 같은 마이너 버전으로 빌드된 릴리스를 쓰고, Boot·Framework 모듈 버전이 섞이면 빌드가 실패한다([G-D012](#3-공통-결정-이력)).

@@ -11,6 +11,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
+import org.springframework.security.web.authentication.session.NullAuthenticatedSessionStrategy;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import com.yhs.livestreaming.global.auth.LoginSessionVerifier;
 import com.yhs.livestreaming.global.security.csrf.SpaCsrfTokenRequestHandler;
@@ -48,7 +49,11 @@ public class GlobalSecurityConfig {
                 // G-D014: SPA 이중 제출. 공개 경로(로그인·가입·OTP)의 상태 변경 요청도 보호한다(무시 경로 없음).
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(csrfTokenRepository)
-                        .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler()))
+                        .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
+                        // stateless 체인에서는 Access 쿠키로 인증된 요청마다 기본 CsrfAuthenticationStrategy가 실행돼
+                        // XSRF-TOKEN 삭제 쿠키를 보냈다. CSRF 토큰 갱신은 로그인 최종 성공·로그아웃에서 CsrfTokenRenewer로만
+                        // 한다(G-D014, GL-T018).
+                        .sessionAuthenticationStrategy(new NullAuthenticatedSessionStrategy()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)

@@ -2,6 +2,7 @@ package com.yhs.livestreaming.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -24,9 +25,12 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.web.FilterChainProxy;
 import org.springframework.test.web.servlet.MockMvc;
 import testsupport.AppIntegrationTest;
+import testsupport.RealCsrf;
 import testsupport.SecurityTestEndpoints;
 
 /**
@@ -70,6 +74,26 @@ class AccessTokenCookieIntegrationTest {
         mockMvc.perform(get("/test/protected/me").cookie(new Cookie(AuthCookieNames.ACCESS_TOKEN, token)))
                 .andExpect(status().isOk())
                 .andExpect(content().string("42"));
+    }
+
+    @Test
+    void authenticatedStateChangingRequestKeepsTheCsrfCookie() throws Exception { // GL-T018, G-D014
+        // 회귀: Access 쿠키로 인증된 POST마다 Spring의 세션 인증 전략(CsrfAuthenticationStrategy)이 XSRF-TOKEN 삭제
+        // 쿠키를 보내 SPA가 CSRF 토큰을 잃었다. CSRF 토큰은 로그인 최종 성공·로그아웃 때만 명시적으로 새로 만든다.
+        Instant expiresAt = Instant.now().plus(Duration.ofDays(7));
+        sessions.create(new NewLoginSession(SID, 42L, "d".repeat(64), expiresAt));
+        Cookie access = new Cookie(AuthCookieNames.ACCESS_TOKEN, issuer.issue(42L, "USER", SID, expiresAt).value());
+        String csrf = RealCsrf.issue(mockMvc);
+
+        MockHttpServletResponse response = mockMvc.perform(post("/test/protected/echo").cookie(access)
+                        .with(RealCsrf.token(csrf)).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"x\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse();
+
+        assertThat(response.getHeaders("Set-Cookie")).noneMatch(value -> value.startsWith(RealCsrf.COOKIE + "="));
+        mockMvc.perform(post("/test/protected/echo").cookie(access).with(RealCsrf.token(csrf))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"y\"}"))
+                .andExpect(status().isOk()); // 같은 토큰을 계속 쓸 수 있다
     }
 
     @Test

@@ -5,7 +5,8 @@
 ## 1. To-Be 설계
 
 - 계층 패키지(`in`·`app`·`domain`·`out`)를 쓴다([backend/README.md 5장](../../backend/README.md#5-모듈과-패키지-규칙)). `app`은 포트(`MemberRepository`)로만 `out`을 쓴다.
-- 회원가입(MB-W01~W04)은 2장 As-Is와 같다. Refresh·로그아웃(MB-W09~W10)은 BE-04, Google(MB-W11)은 BE-05에서 설계한다.
+- 회원가입(MB-W01~W04)은 2장 As-Is와 같다. Google(MB-W11)은 BE-05에서 설계한다.
+- Refresh·로그아웃(MB-W09~W10, Issue #17): Refresh 쿠키 → 해시 조회 → 재사용 탐지 → 회원 재확인 → 같은 sid로 Rotation, 로그아웃은 Access sid·Refresh 해시로 찾은 세션 폐기. 정책은 [MB-D020](decisions.md#1-확정-결정)~[MB-D022](decisions.md#1-확정-결정). 구현은 2장 "Refresh·로그아웃".
 - 로그인·OTP·토큰(MB-W05~W08, Issue #13): 1차 인증 → OTP Challenge·이메일 OTP → 로그인 세션·토큰 쿠키 발급. 정책은 [MB-D011](decisions.md#1-확정-결정)~[MB-D019](decisions.md#1-확정-결정), CSRF는 [G-D014](../policy.md#3-공통-결정-이력). 클래스·Redis 키·설정 설계는 구현 계획에서 정하고 구현 뒤 2장 As-Is에 적는다.
 - `LoginSessionVerifier`(global 포트, G-D006·G-D007)는 member가 Redis 로그인 세션으로 구현한다.
 - 비밀번호 재해시: `Pbkdf2PasswordHasher.needsRehash()`가 반복 횟수·키 ID 변경을 판정한다. 실제 재해시는 로그인 성공 시점(BE-03)에 한다([MB-D006](decisions.md#1-확정-결정)).
@@ -13,7 +14,7 @@
 
 ## 2. As-Is
 
-2026-11-26, 브랜치 `feature/13-member-login-otp` 기준(회원가입은 #10, 로그인·OTP·토큰은 #13).
+2026-11-26, 브랜치 `feature/17-member-refresh-logout` 기준(회원가입은 #10, 로그인·OTP·토큰은 #13, Refresh·로그아웃은 #17).
 
 - 빌드: [modules/member/build.gradle.kts](../../backend/modules/member/build.gradle.kts) — global, springdoc(Spec 어노테이션), `spring-boot-starter-data-redis`, `spring-boot-starter-mail`. 테스트: data-jpa-test, data-redis-test, Testcontainers PostgreSQL·Redis(GenericContainer)·Mailpit·JUnit, Flyway, PostgreSQL 드라이버.
 - 패키지와 클래스
@@ -23,15 +24,15 @@
 | `domain` | `Member`, `AccountType`, `AccountStatus`, `MemberRole` | `Member.registerLocal()`은 LOCAL·PENDING·이메일 미확인·USER로 만든다([MB-D003](decisions.md#1-확정-결정)) |
 | `app` | `SignupService`, `SignupCommand`, `SignupResult`, `MemberRepository`(포트), `MemberErrorCode` | 사전 중복 검사 → 유출 비밀번호 검사 → 비밀번호 해시 → 저장. HIBP 호출과 해시는 트랜잭션 밖. 중복은 409(`MEMBER_USERNAME_DUPLICATE`·`MEMBER_EMAIL_DUPLICATE`), 유출은 400 `MEMBER_PASSWORD_BREACHED`, 확인 불가는 503 `MEMBER_PASSWORD_CHECK_UNAVAILABLE`([MB-D010](decisions.md#1-확정-결정)) |
 | `app.password` | `MemberPasswordProperties`, `MemberPasswordConfig`, `PasswordHasher`(계약)·`Pbkdf2PasswordHasher`, `PasswordNormalization`(NFC 한 곳), `PasswordPolicy`, `PasswordViolation`, `BreachedPasswordChecker`(포트) | 해시·정책(길이·문맥 단어)·유출 검사 계약([MB-D004~D007](decisions.md#1-확정-결정), [MB-D010](decisions.md#1-확정-결정)) |
-| `app.login` | `LoginService`, `LoginCompletionService`, `CompletedLogin`, `MemberLoginConfig` | 1차 인증, OTP 성공 뒤 상태 재확인·활성화·세션 발급(아래 "로그인·OTP") |
+| `app.login` | `LoginService`, `LoginCompletionService`, `CompletedLogin`, `RefreshService`, `LogoutService`, `MemberLoginConfig` | 1차 인증, OTP 성공 뒤 상태 재확인·활성화·세션 발급(아래 "로그인·OTP"), Refresh·로그아웃(아래 "Refresh·로그아웃") |
 | `app.otp` | `OtpService`, `LoginChallenge`, `OtpChallengeStarter`, `OtpCodes`, `MemberOtpProperties`, `OtpChallengeStore`(포트), `OtpMailSender`(포트), `MemberLookup`, `NewOtpChallenge`, `OtpChallengeSnapshot`, `OtpStoreResult`, `OtpResent` | OTP 발급·재발송·검증, 발송 실패 보상([MB-D015](decisions.md#1-확정-결정)·[MB-D016](decisions.md#1-확정-결정)) |
 | `app.limit` | `MemberLimitProperties`, `RequestRateLimiter`(포트), `LoginAttemptLimiter`(포트), `RateLimitScope` | 제한 수치·포트([MB-D017](decisions.md#1-확정-결정)·[MB-D018](decisions.md#1-확정-결정)) |
-| `app.session` | `LoginSessionStore`(포트), `NewLoginSession`, `RandomTokens`, `MemberAccessTokenRoles` | 세션·Refresh 저장 계약, 256비트 난수·SHA-256, JWT `role` 허용 값 |
+| `app.session` | `LoginSessionStore`(포트: create·findRefresh·rotate·revoke), `NewLoginSession`, `RefreshTokenRecord`, `RefreshRotation`, `RandomTokens`, `MemberAccessTokenRoles` | 세션·Refresh 저장·교체·폐기 계약, 256비트 난수·SHA-256, JWT `role` 허용 값 |
 | `app.password` | `DummyPasswordHash` | 없는 username·GOOGLE 로그인의 같은 비용 비교 |
 | `out` | `MemberJpaRepository`, `MemberRepositoryAdapter`, `HibpPwnedPasswordsClient`, `HibpProperties`, `HibpClientConfig` | HIBP: 아래 "유출 비밀번호 검사". 저장: `saveAndFlush`로 즉시 INSERT하고, `uk_members_username`·`ux_members_local_email` 위반만 409로 바꾼다. 그 밖의 제약 위반은 제약 이름·SQLState만 WARN으로 남기고 원인 없는 `IllegalStateException`(500)으로 던진다(DB 상세에 든 개인정보를 응답·로그에 싣지 않으려고). 로그인용 `findByUsername`·`findById`, 조건부 UPDATE 2개(재해시: 기존 해시 조건, 활성화: PENDING·`created_at > now-24h` 조건, 둘 다 짧은 트랜잭션 하나) |
 | `out.redis` | `RedisLoginSessionStore`(+`LoginSessionVerifier` 구현), `RedisOtpChallengeStore`, `RedisLoginAttemptLimiter`, `RedisRequestRateLimiter`, `RedisLuaScripts`, `RedisKeys` | 아래 "Redis 키·Lua". Redis 오류는 인증 흐름 503 `AUTH_SESSION_STORE_UNAVAILABLE`, 요청 제한 503 `COMMON_RATE_LIMIT_UNAVAILABLE` |
 | `out.mail` | `SmtpOtpMailSender`, `MemberOtpMailProperties`, `MemberMailConfig`, `OtpDeliveryException` | SMTP 동기 발송, 실패는 원인·주소·OTP 없는 예외 |
-| `in` | `ApiV1AuthController`, `ApiV1AuthSpec`, `AuthCookieWriter`, `MemberAuthCookies`(Refresh·Challenge 쿠키 이름·Refresh Path), `ClientIp`, `dto/SignupRequest`·`SignupResponse`·`LoginRequest`·`OtpVerifyRequest`·`OtpRequiredResponse`·`LoginSuccessResponse`, `ValidSignupPassword`, `SignupPasswordValidator`, `MemberPublicEndpoints` | 가입·로그인·OTP API. IP 제한을 서비스보다 먼저 건다. 쿠키 발급·삭제는 `AuthCookieWriter` 한 곳(HttpOnly·Secure·Strict·Domain 없음, Max-Age = 만료까지 남은 초 올림). 공개 경로: signup·login·otp/verify·otp/resend |
+| `in` | `ApiV1AuthController`, `ApiV1AuthSpec`, `AuthCookieWriter`, `MemberAuthCookies`(Refresh·Challenge 쿠키 이름·Refresh Path), `ClientIp`, `dto/SignupRequest`·`SignupResponse`·`LoginRequest`·`OtpVerifyRequest`·`OtpRequiredResponse`·`LoginSuccessResponse`, `ValidSignupPassword`, `SignupPasswordValidator`, `MemberPublicEndpoints` | 가입·로그인·OTP·Refresh·로그아웃 API. IP 제한을 서비스보다 먼저 건다. 쿠키 발급·삭제는 `AuthCookieWriter` 한 곳(HttpOnly·Secure·Strict·Domain 없음, Max-Age = 만료까지 남은 초 올림). 공개 경로: signup·login·otp/verify·otp/resend |
 
 - 비밀번호 해시 포맷: `pbkdf2-sha256$v1$nfc$i=<반복 횟수>$k=<키 ID>$<Salt Base64>$<해시 Base64>`. Salt 16바이트(SecureRandom), PBKDF2 출력 256비트, 최종 HMAC-SHA256(pepper) 256비트, Base64는 패딩 없음. 검증은 `MessageDigest.isEqual`(일정 시간). 포맷 오류·키 ID 불일치는 불일치로 처리한다.
 - 비밀번호 정책: NFC 뒤 code point 15~64자. 문맥 단어 판정은 "소문자 → 글자·숫자만 → 끝 숫자 제거"한 핵심어가 username·서비스 이름(`yhslivestreaming`·`yhslive`·`livestreaming`·`yhs`)의 핵심어와 같으면(뒤집은 경우 포함) 거부한다. 끝 숫자는 code point 단위로 뗀다. 또 글자·숫자만 남긴 값(끝 숫자를 떼기 전)이 username과 같거나 뒤집어 같으면 거부한다(숫자·밑줄만인 username 대비). 대소문자는 구분하지 않는다.
@@ -54,14 +55,22 @@
 - 클라이언트 IP: `getRemoteAddr()`만(MB-D018, MB-U06).
 - 설정: `member.otp.hmac-key`·`hmac-key-id`(환경변수 `MEMBER_OTP_HMAC_KEY`·`_ID`, 기본값 없음), `member.otp.mail.from`(`MEMBER_OTP_MAIL_FROM`), `member.limits.*`(기본값 = 정책 값. 범위별로 일부만 설정하면 비운 `max`·기간은 그 범위의 기본값, `max` 1 미만이면 기동 실패), `spring.mail.*`(호스트·계정은 환경변수, SMTP 인증·STARTTLS 플래그는 기본값 없는 `MEMBER_SMTP_AUTH`·`MEMBER_SMTP_STARTTLS`). 메일 health는 끈다(app `application.yml`).
 
+### Refresh·로그아웃 (BE-04)
+
+- 결정: [MB-D020](decisions.md#1-확정-결정)~[MB-D022](decisions.md#1-확정-결정). API: `POST /api/v1/auth/refresh`·`POST /api/v1/auth/logout`(공개 경로, CSRF 필요, `MemberPublicEndpoints`).
+- Refresh(`RefreshService`, `app.login`): IP 제한(`RateLimitScope.REFRESH`, 기본 10분 120회, `member.limits.refresh`) → 쿠키 값 형식(43자 Base64url) → `findRefresh`(해시 키 → 세션, 회원 일치 확인) → USED면 DB 조회 전에 `revoke` + 401 + WARN(값 없음) → 회원 재조회(DB 장애는 그대로 전파해 500 `COMMON_INTERNAL_ERROR`, 아무것도 바꾸지 않음) → 없음·PENDING 401, DISABLED 403(둘 다 `revoke`) → DB role로 Access 서명(만료 ≤ 세션 절대 만료) → `refresh_rotate.lua`(충돌이면 새 난수로 1회 더, 다시 충돌하면 `IllegalStateException` 500). 조회 결과는 참고용이고 최종 판단은 Lua다.
+- 컨트롤러: 401 `AUTH_REFRESH_INVALID`·403 `MEMBER_ACCOUNT_DISABLED`일 때만 Access·Refresh 쿠키를 지우고 예외를 다시 던진다. 성공 때 CSRF 토큰은 건드리지 않는다.
+- 로그아웃(`LogoutService`): Access sid는 `@AuthenticationPrincipal AuthenticatedMember`(global 필터가 JWT 전체 검증 + 세션 소유자 확인을 통과시킨 경우만), Refresh는 `findRefresh`(USED 포함). sid를 모아 `revoke`(소유 회원 확인). 성공하면 Access·Refresh·Challenge 쿠키 삭제 + `CsrfTokenRenewer`. 저장소 장애는 예외(503)로 끝나 쿠키·CSRF가 남는다. 필터 단계의 세션 확인 장애도 503이다.
+- global 변경: CSRF 세션 인증 전략을 `NullAuthenticatedSessionStrategy`로 바꿨다. 기본 전략이 인증된 POST마다 `XSRF-TOKEN`을 지워 MB-D020·D022를 깨뜨렸다([docs/global/module.md](../global/module.md) 2장, GL-T018).
+
 ### Redis 키·Lua
 
 username·IP는 SHA-256 hex로 키에 쓴다. 원문이 키 목록에 남지 않게 하려는 것이며 입력 공간이 작아 사전 대입으로 되돌릴 수 있으므로 익명화로 보지 않는다. `otp_issue.lua`는 이전 Challenge 키를 포인터에서 읽어 지우므로 단일 Redis(클러스터 아님)를 전제한다.
 
 | 키 | 자료형 | 내용 | TTL |
 | --- | --- | --- | --- |
-| `auth:session:{sid}` | HASH | memberId, refreshHash, expiresAt(ms) | 절대 만료(PEXPIREAT, 7일) |
-| `auth:refresh:{sha256(refresh)}` | HASH | sid, memberId, expiresAt | 같은 절대 만료 |
+| `auth:session:{sid}` | HASH | memberId, refreshHash(현재 Refresh 해시), expiresAt(ms) | 절대 만료(PEXPIREAT, 7일, Rotation으로 연장 없음) |
+| `auth:refresh:{sha256(refresh)}` | HASH | sid, memberId, expiresAt. 세션의 현재 해시와 다르면 USED(별도 상태 값 없음) | 같은 절대 만료(이전 해시 키도 만료까지 남음) |
 | `auth:otp:challenge:{challengeId}` | HASH | memberId, version, otpHmac(무효면 빈 값), keyId, attempts, otpExpiresAt, challengeExpiresAt, confirmed(발송 성공 확인 0/1), sentDigest·prevSentDigest(최근 숫자 지문 2개) | Challenge 절대 10분 |
 | `auth:otp:member:{id}:current` | STRING | 현재 challengeId | Challenge 만료까지 |
 | `auth:otp:member:{id}:last-issued` | STRING | 60초 발급 간격 | 60초 |
@@ -69,11 +78,13 @@ username·IP는 SHA-256 hex로 키에 쓴다. 원문이 키 목록에 남지 않
 | `auth:otp:member:{id}:fail:24h` | 카운터 | OTP 검증 실패 합산 | 첫 증가부터 24시간 |
 | `auth:login:fail:{sha256(username)}` | 카운터 | 연속 실패 | 마지막 실패 + 24시간 |
 | `auth:login:block:{sha256(username)}` | STRING | 차단 | 15분(연장 없음) |
-| `ratelimit:{signup\|login\|otp}:{sha256(ip)}` | 카운터 | IP 요청 수 | 첫 요청부터 1시간·10분·10분 |
+| `ratelimit:{signup\|login\|otp\|refresh}:{sha256(ip)}` | 카운터 | IP 요청 수 | 첫 요청부터 1시간·10분·10분·10분 |
 
 | Lua(`src/main/resources/redis/member`) | 원자 처리 범위 |
 | --- | --- |
 | `session_create` | 두 키가 모두 없을 때만 HSET + PEXPIREAT 2쌍. 모든 확인을 쓰기 전에 끝낸다. 결과를 확인하지 못하면(예외·null) 인증 쿠키를 주지 않는다 |
+| `refresh_rotate` | 첫 쓰기 전에 이전 키 자료형·sid·memberId, 세션 자료형·회원·절대 만료(조회 값과 같고 지나지 않음)·현재 해시, 새 키 충돌을 모두 확인. USED면 세션과 (같은 sid인) 현재 Refresh 키 삭제. 쓰기는 새 Refresh 키(HSET + PEXPIREAT = 세션 만료) → 세션 `refreshHash` 순서라 중간에 멈춰도 새 토큰은 쓰이지 않는다. 세션이 없으면 만들지 않는다 |
+| `session_revoke` | 세션 회원이 같을 때만 세션 삭제 + 현재 Refresh 키(같은 sid일 때만) 삭제. 없으면 0, 다른 회원이면 아무것도 지우지 않음 |
 | `rate_limit` | INCR → 첫 값이면 PEXPIRE, TTL 없는 키 보정, 초과면 남은 ms |
 | `login_fail` / `login_success` | 차단 중이면 세지 않음 / 차단 키 생성 + 카운터 삭제 / 성공 시 차단 확인 뒤 카운터 삭제 |
 | `otp_issue` / `otp_resend` / `otp_verify` / `otp_confirm_delivered` / `otp_delivery_failed` | 위 "로그인·OTP" 참조. 새 OTP는 발송 확인 전 검증 불가 |

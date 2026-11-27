@@ -75,4 +75,31 @@ class AuthOpenApiIntegrationTest {
                 .andExpect(jsonPath("$.components.schemas.LoginSuccessResponse.properties.accessTokenExpiresAt")
                         .exists());
     }
+
+    @Test
+    void refreshAndLogoutSpecsDocumentActualResponses() throws Exception { // MB-T043
+        String refresh = "$.paths['/api/v1/auth/refresh'].post";
+        String logout = "$.paths['/api/v1/auth/logout'].post";
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(refresh + ".tags[0]").value("Authentication"))
+                .andExpect(jsonPath(refresh + ".security[0].csrfHeader").exists())
+                .andExpect(jsonPath(refresh + ".responses['200'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/LoginSuccessResponse"))
+                .andExpect(jsonPath(refresh + ".responses['401']" + PROBLEM).value(PROBLEM_REF))
+                .andExpect(jsonPath(refresh + ".responses['403']" + PROBLEM).value(PROBLEM_REF))
+                .andExpect(jsonPath(refresh + ".responses['429']" + PROBLEM).value(PROBLEM_REF))
+                .andExpect(jsonPath(refresh + ".responses['429'].headers['Retry-After']").exists())
+                .andExpect(jsonPath(refresh + ".responses['500']" + PROBLEM).value(PROBLEM_REF))
+                .andExpect(jsonPath(refresh + ".responses['503']" + PROBLEM).value(PROBLEM_REF))
+                .andExpect(jsonPath(refresh + ".parameters[?(@.in == 'cookie')].name", hasItem("__Secure-yhs_rt")))
+                .andExpect(jsonPath(logout + ".tags[0]").value("Authentication"))
+                .andExpect(jsonPath(logout + ".security[0].csrfHeader").exists())
+                .andExpect(jsonPath(logout + ".responses['204']").exists())
+                .andExpect(jsonPath(logout + ".responses['204'].content").doesNotExist())
+                .andExpect(jsonPath(logout + ".responses['403']" + PROBLEM).value(PROBLEM_REF))
+                .andExpect(jsonPath(logout + ".responses['503']" + PROBLEM).value(PROBLEM_REF))
+                .andExpect(jsonPath(logout + ".responses['200']").doesNotExist())
+                .andExpect(jsonPath(logout + ".parameters[?(@.in == 'cookie')].name", hasItem("__Secure-yhs_rt")));
+    }
 }

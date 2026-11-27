@@ -1,6 +1,7 @@
 package com.yhs.livestreaming.member.in;
 
 import com.yhs.livestreaming.global.openapi.OpenApiConfig;
+import com.yhs.livestreaming.global.auth.AuthenticatedMember;
 import com.yhs.livestreaming.member.in.dto.LoginRequest;
 import com.yhs.livestreaming.member.in.dto.LoginSuccessResponse;
 import com.yhs.livestreaming.member.in.dto.OtpRequiredResponse;
@@ -139,6 +140,55 @@ public interface ApiV1AuthSpec {
     ResponseEntity<LoginSuccessResponse> verifyOtp(
             @Parameter(in = ParameterIn.COOKIE, name = MemberAuthCookies.OTP_CHALLENGE, description = "OTP Challenge") String challengeId,
             @RequestBody OtpVerifyRequest request,
+            @Parameter(hidden = true) HttpServletRequest httpRequest,
+            @Parameter(hidden = true) HttpServletResponse httpResponse);
+
+    @Operation(summary = "로그인 연장(Refresh)",
+            description = "Refresh Token 쿠키(__Secure-yhs_rt)만으로 인증한다. Access 쿠키가 없거나 만료돼도 된다. 성공하면 같은 "
+                    + "로그인 세션에 새 Access·Refresh 쿠키를 주고 이전 Refresh Token은 다시 쓸 수 없다(7일 절대 만료는 늘어나지 "
+                    + "않는다). 이미 쓴 Refresh Token을 다시 보내면 로그인 세션 전체가 폐기된다. CSRF 토큰은 새로 만들지 않는다. "
+                    + "401·403이면 Access·Refresh 쿠키를 지우고, 그 밖의 실패에서는 쿠키를 남긴다.",
+            security = @SecurityRequirement(name = CSRF_SCHEME))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "연장 완료. Set-Cookie: __Host-yhs_at, __Secure-yhs_rt",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = LoginSuccessResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Refresh Token 없음·모르는 토큰·만료·재사용, 회원 없음·PENDING. "
+                    + "code=AUTH_REFRESH_INVALID(다시 로그인). Access·Refresh 쿠키 삭제",
+                    content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(ref = PROBLEM_DETAIL_REF))),
+            @ApiResponse(responseCode = "403", description = "사용 중지 계정(code=MEMBER_ACCOUNT_DISABLED, 쿠키 삭제) 또는 "
+                    + "CSRF 실패(code=AUTH_CSRF_INVALID, 쿠키 유지)",
+                    content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(ref = PROBLEM_DETAIL_REF))),
+            @ApiResponse(responseCode = "429", description = "IP 요청 초과(code=COMMON_TOO_MANY_REQUESTS). 쿠키 유지",
+                    headers = @Header(name = "Retry-After", description = "다시 시도할 수 있을 때까지 초"),
+                    content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(ref = PROBLEM_DETAIL_REF))),
+            @ApiResponse(responseCode = "500", description = "회원 조회 장애 등 서버 오류(code=COMMON_INTERNAL_ERROR). "
+                    + "토큰을 바꾸지 않고 쿠키 유지",
+                    content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(ref = PROBLEM_DETAIL_REF))),
+            @ApiResponse(responseCode = "503", description = "인증 저장소 장애(code=AUTH_SESSION_STORE_UNAVAILABLE·"
+                    + "COMMON_RATE_LIMIT_UNAVAILABLE). 쿠키 유지",
+                    content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(ref = PROBLEM_DETAIL_REF)))
+    })
+    ResponseEntity<LoginSuccessResponse> refresh(
+            @Parameter(in = ParameterIn.COOKIE, name = MemberAuthCookies.REFRESH_TOKEN, description = "Refresh Token") String refreshToken,
+            @Parameter(hidden = true) HttpServletRequest httpRequest,
+            @Parameter(hidden = true) HttpServletResponse httpResponse);
+
+    @Operation(summary = "로그아웃",
+            description = "이 브라우저의 Access·Refresh 쿠키가 가리키는 로그인 세션을 서버에서 폐기하고 인증 쿠키를 지우며 CSRF "
+                    + "토큰을 새로 발급한다. Access가 만료돼도 Refresh 쿠키로 폐기한다. 폐기할 세션이 없어도 204다. 저장소 장애면 "
+                    + "503이고 쿠키·CSRF 토큰을 남긴다(다시 시도).",
+            security = @SecurityRequirement(name = CSRF_SCHEME))
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "로그아웃 완료. Set-Cookie: 인증 쿠키 삭제(Max-Age=0), XSRF-TOKEN"),
+            @ApiResponse(responseCode = "403", description = "CSRF 실패. code=AUTH_CSRF_INVALID",
+                    content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(ref = PROBLEM_DETAIL_REF))),
+            @ApiResponse(responseCode = "503", description = "인증 저장소 장애. code=AUTH_SESSION_STORE_UNAVAILABLE",
+                    content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(ref = PROBLEM_DETAIL_REF)))
+    })
+    ResponseEntity<Void> logout(
+            @Parameter(hidden = true) AuthenticatedMember accessPrincipal,
+            @Parameter(in = ParameterIn.COOKIE, name = MemberAuthCookies.REFRESH_TOKEN, description = "Refresh Token") String refreshToken,
             @Parameter(hidden = true) HttpServletRequest httpRequest,
             @Parameter(hidden = true) HttpServletResponse httpResponse);
 }
