@@ -219,9 +219,11 @@ class RedisLoginSessionRotationTest extends RedisTestSupport {
         CountDownLatch ready = new CountDownLatch(threads);
         CountDownLatch start = new CountDownLatch(1);
         List<Future<RotateResult>> futures = new ArrayList<>();
+        List<String> newHashes = new ArrayList<>();
         try {
             for (int i = 0; i < threads; i++) {
                 String newHash = String.format("%064x", i + 100);
+                newHashes.add(newHash);
                 futures.add(pool.submit(() -> {
                     ready.countDown();
                     start.await(5, TimeUnit.SECONDS);
@@ -241,6 +243,9 @@ class RedisLoginSessionRotationTest extends RedisTestSupport {
             assertThat(redisTemplate.hasKey("auth:session:" + SID)).isFalse();
             assertThat(redisTemplate.keys("auth:refresh:*")).allSatisfy(key ->
                     assertThat(store.findRefresh(key.substring("auth:refresh:".length()))).isEmpty());
+            // 고아 키 없음: 각 작업이 제출한 새 해시 키가 남지 않는다(최초 발급 HASH_1은 USED로 만료까지 남을 수 있어 제외)
+            assertThat(newHashes).allSatisfy(hash ->
+                    assertThat(redisTemplate.hasKey("auth:refresh:" + hash)).as(hash).isFalse());
         } finally {
             pool.shutdownNow();
         }
@@ -321,16 +326,18 @@ class RedisLoginSessionRotationTest extends RedisTestSupport {
 
     @Test
     void unknownScriptResultIsNotSilentlyTreatedAsInvalidOrNotFound() { // S6 지적: Lua·Java 반환 코드 불일치 방어
-        // 모든 execute 호출이 스크립트가 정의하지 않은 코드 9를 돌려준다(null 경로와 구분)
-        StringRedisTemplate unexpected = org.mockito.Mockito.mock(StringRedisTemplate.class,
-                invocation -> "execute".equals(invocation.getMethod().getName()) ? 9L : null);
-        RedisLoginSessionStore broken = new RedisLoginSessionStore(unexpected, Clock.systemUTC());
-        Instant exp = Instant.now().plus(Duration.ofDays(1));
+        // 스크립트가 정의하지 않은 코드: 9, 그리고 하위 32비트가 1인 값(intValue()로 자르면 1이 된다)
+        for (long code : new long[] {9L, (1L << 32) + 1}) {
+            StringRedisTemplate unexpected = org.mockito.Mockito.mock(StringRedisTemplate.class,
+                    invocation -> "execute".equals(invocation.getMethod().getName()) ? code : null);
+            RedisLoginSessionStore broken = new RedisLoginSessionStore(unexpected, Clock.systemUTC());
+            Instant exp = Instant.now().plus(Duration.ofDays(1));
 
-        assertThatThrownBy(() -> broken.rotate(new RefreshRotation(SID, MEMBER, HASH_1, HASH_2, exp)))
-                .isInstanceOf(LoginSessionStoreUnavailableException.class);
-        assertThatThrownBy(() -> broken.revoke(SID, MEMBER))
-                .isInstanceOf(LoginSessionStoreUnavailableException.class);
+            assertThatThrownBy(() -> broken.rotate(new RefreshRotation(SID, MEMBER, HASH_1, HASH_2, exp)))
+                    .as("rotate code=%d", code).isInstanceOf(LoginSessionStoreUnavailableException.class);
+            assertThatThrownBy(() -> broken.revoke(SID, MEMBER))
+                    .as("revoke code=%d", code).isInstanceOf(LoginSessionStoreUnavailableException.class);
+        }
     }
 
     private long absoluteExpiry(String key) {

@@ -82,8 +82,7 @@ public class RefreshService {
         String role = member.getRole().name();
         for (int attempt = 0; attempt < 2; attempt++) {
             String refreshToken = newToken.get();
-            IssuedAccessToken accessToken =
-                    accessTokens.issue(member.getId(), role, found.sessionId(), found.expiresAt());
+            IssuedAccessToken accessToken = issueAccessToken(member.getId(), role, found);
             RotateResult result = sessions.rotate(new RefreshRotation(found.sessionId(), found.memberId(),
                     currentHash, RandomTokens.sha256Hex(refreshToken), found.expiresAt()));
             switch (result) {
@@ -101,6 +100,24 @@ public class RefreshService {
             }
         }
         throw new IllegalStateException("Refresh Token 해시 충돌이 반복됐다");
+    }
+
+    /**
+     * DB 조회 동안 세션 절대 만료 시각이 지났을 수 있다. 발급 직전에 다시 확인하고, 그 사이에 끝나 발급기가 거부해도
+     * 다른 만료와 같은 401로 처리한다(500이 아니다). 만료가 아닌 발급 거부는 그대로 내부 오류다.
+     */
+    private IssuedAccessToken issueAccessToken(long memberId, String role, RefreshTokenRecord found) {
+        if (!found.expiresAt().isAfter(clock.instant())) {
+            throw invalid();
+        }
+        try {
+            return accessTokens.issue(memberId, role, found.sessionId(), found.expiresAt());
+        } catch (IllegalArgumentException ex) {
+            if (!found.expiresAt().isAfter(clock.instant())) {
+                throw invalid();
+            }
+            throw ex;
+        }
     }
 
     private static BusinessException invalid() {

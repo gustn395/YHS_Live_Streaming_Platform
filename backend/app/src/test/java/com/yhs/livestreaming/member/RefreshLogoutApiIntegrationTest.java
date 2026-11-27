@@ -130,6 +130,29 @@ class RefreshLogoutApiIntegrationTest {
     }
 
     @Test
+    void accessCookieNeverOutlivesASessionThatEndsWithinFifteenMinutes() throws Exception { // MB-T040, MB-D012
+        Browser browser = loggedIn("tester01");
+        String sid = onlySessionId();
+        // 세션 절대 만료가 5분 남은 상태를 만든다(세션·Refresh 키의 저장값과 Redis 만료를 함께 당긴다)
+        long soon = System.currentTimeMillis() + 300_000;
+        String refreshKey = "auth:refresh:" + sha256(browser.refresh().getValue());
+        redis.opsForHash().put("auth:session:" + sid, "expiresAt", Long.toString(soon));
+        redis.opsForHash().put(refreshKey, "expiresAt", Long.toString(soon));
+        redis.execute(new org.springframework.data.redis.core.script.DefaultRedisScript<>(
+                "redis.call('PEXPIREAT', KEYS[1], ARGV[1]); return redis.call('PEXPIREAT', KEYS[2], ARGV[1])",
+                Long.class), List.of("auth:session:" + sid, refreshKey), Long.toString(soon));
+
+        MockHttpServletResponse response = mockMvc.perform(refresh(browser.refresh(), browser.csrf()))
+                .andExpect(status().isOk()).andReturn().getResponse();
+
+        long remaining = (soon - System.currentTimeMillis() + 999) / 1000;
+        assertThat(maxAge(response, AuthCookieNames.ACCESS_TOKEN)).isBetween(remaining - MAX_AGE_SLACK, 300L);
+        assertThat(maxAge(response, MemberAuthCookies.REFRESH_TOKEN)).isBetween(remaining - MAX_AGE_SLACK, 300L);
+        assertThat(Instant.parse(com.jayway.jsonpath.JsonPath.read(response.getContentAsString(StandardCharsets.UTF_8),
+                "$.accessTokenExpiresAt"))).isBeforeOrEqualTo(Instant.ofEpochMilli(soon));
+    }
+
+    @Test
     void refreshWithAValidAccessCookieAlsoKeepsTheCsrfToken() throws Exception { // MB-T040
         Browser browser = loggedIn("tester01");
 

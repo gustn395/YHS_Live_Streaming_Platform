@@ -114,14 +114,22 @@ public class RedisLoginSessionStore implements LoginSessionStore, LoginSessionVe
             // 결과를 확인하지 못하면 교체됐다고 보지 않는다(새 쿠키 미발급)
             throw new LoginSessionStoreUnavailableException("Refresh 교체 결과를 확인할 수 없다", null);
         }
-        // 코드는 refresh_rotate.lua 머리말과 같다. 모르는 값은 무효로 넘기지 않고 확인 불가로 본다(쿠키 미발급).
-        return switch (result.intValue()) {
-            case 1 -> RotateResult.ROTATED;
-            case 0 -> RotateResult.INVALID;
-            case 2 -> RotateResult.REUSED;
-            case 3 -> RotateResult.COLLISION;
-            default -> throw new LoginSessionStoreUnavailableException("Refresh 교체 결과를 해석할 수 없다", null);
-        };
+        // 코드는 refresh_rotate.lua 머리말과 같다. long 그대로 비교한다(intValue()는 하위 32비트만 남겨 다른 값을 1로
+        // 만들 수 있다). 모르는 값은 무효로 넘기지 않고 확인 불가로 본다(쿠키 미발급).
+        long code = result;
+        if (code == 1L) {
+            return RotateResult.ROTATED;
+        }
+        if (code == 0L) {
+            return RotateResult.INVALID;
+        }
+        if (code == 2L) {
+            return RotateResult.REUSED;
+        }
+        if (code == 3L) {
+            return RotateResult.COLLISION;
+        }
+        throw new LoginSessionStoreUnavailableException("Refresh 교체 결과를 해석할 수 없다", null);
     }
 
     @Override
@@ -136,13 +144,18 @@ public class RedisLoginSessionStore implements LoginSessionStore, LoginSessionVe
         if (result == null) {
             throw new LoginSessionStoreUnavailableException("세션 폐기 결과를 확인할 수 없다", null);
         }
-        // 코드는 session_revoke.lua 머리말과 같다. 모르는 값은 폐기 실패로 본다(로그아웃 503, 쿠키 유지).
-        return switch (result.intValue()) {
-            case 1 -> RevokeResult.REVOKED;
-            case 0 -> RevokeResult.NOT_FOUND;
-            case -1 -> RevokeResult.MEMBER_MISMATCH;
-            default -> throw new LoginSessionStoreUnavailableException("세션 폐기 결과를 해석할 수 없다", null);
-        };
+        // 코드는 session_revoke.lua 머리말과 같다. long 그대로 비교하고, 모르는 값은 폐기 실패로 본다(로그아웃 503, 쿠키 유지).
+        long code = result;
+        if (code == 1L) {
+            return RevokeResult.REVOKED;
+        }
+        if (code == 0L) {
+            return RevokeResult.NOT_FOUND;
+        }
+        if (code == -1L) {
+            return RevokeResult.MEMBER_MISMATCH;
+        }
+        throw new LoginSessionStoreUnavailableException("세션 폐기 결과를 해석할 수 없다", null);
     }
 
     @Override

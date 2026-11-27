@@ -52,5 +52,11 @@
 | 2026-11-26 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (S6 반영 후 S5) | 성공(exit 0). global 54, member 203, app 99 통과 | API 동시 Refresh 테스트는 구현 뒤 작성(test-after) |
 | 2026-11-27 | `.\gradlew.bat :app:build` (Commit 직전) | 성공(exit 0). WAR 2개(실행 가능 78.7MB·plain 66.4MB), `:app:test` UP-TO-DATE(직전 --rerun 통과) | |
 | 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (S10 뒤 최종 S5) + `:app:build` | 성공(exit 0). global 54, member 203, app 99 통과, build exit 0 | |
+| 2026-11-27 | (#17 Phase 5, CodeRabbit 8건) `.\gradlew.bat :modules:member:test --tests "*RefreshServiceTest" --tests "*RedisLoginSessionRotationTest" :app:test --tests "*RefreshLogoutApiIntegrationTest"` (회귀 테스트 먼저) | member 31건 중 2 실패(의도) | 회원 조회 중 세션 만료가 401이 아님, 하위 32비트가 1인 Lua 결과 코드를 ROTATED로 해석. 고아 키·5분 남은 세션 Max-Age 테스트는 통과(회귀 감시) |
+| 2026-11-27 | 같은 명령 (수정 후) | 성공. RefreshServiceTest 13, RedisLoginSessionRotationTest 18, RefreshLogoutApiIntegrationTest 21 통과 | |
+| 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (S5) | 성공(exit 0). global 54, member 204, app 100 통과 | |
+| 2026-11-27 | (S6 재리뷰 반영) `.\gradlew.bat :modules:member:test --tests "*RefreshServiceTest"` (발급 순간 만료·다른 발급 거부 테스트 2건, test-after) | 성공. 15건 통과. 변이 확인: catch 분기를 끄면 `issuerRejectingBecauseTheSessionJustEndedIsRefreshInvalid` 실패, 되돌린 뒤 통과 | 변이 표시(`[MUTATION-tmp]`) 0건 확인 |
+| 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (S5) | 성공(exit 0). global 54, member 206, app 100 통과 | |
+| 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (Phase 5 S10 뒤 최종 S5) + `:app:build` | 성공(exit 0). global 54, member 206, app 100 통과, build exit 0(WAR 2개) | MB-D020 서술 보완(Q1=a) 반영 뒤 |
 
 - 미실행: 로컬 전체 `./gradlew clean build`(빌드 정책상 실행하지 않음).

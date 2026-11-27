@@ -208,6 +208,92 @@ class RefreshServiceTest {
         assertThat(sessions.revoked).isEmpty();
     }
 
+    @Test
+    void sessionExpiringDuringMemberLookupIsRefreshInvalidNotAnInternalError() { // CodeRabbit: 발급 전 만료
+        java.util.concurrent.atomic.AtomicReference<Instant> now = new java.util.concurrent.atomic.AtomicReference<>(NOW);
+        Clock moving = new Clock() {
+            @Override
+            public java.time.ZoneId getZone() {
+                return ZoneOffset.UTC;
+            }
+
+            @Override
+            public Clock withZone(java.time.ZoneId zone) {
+                return this;
+            }
+
+            @Override
+            public Instant instant() {
+                return now.get();
+            }
+        };
+        Instant expires = NOW.plusSeconds(1);
+        active(1L);
+        sessions.put(SID, 1L, REFRESH_HASH, expires);
+        members.onFind = () -> now.set(expires); // DB 조회 동안 세션 절대 만료 시각에 닿음
+        RefreshService racing = new RefreshService(members, sessions, (memberId, role, sessionId, sessionExpiresAt) -> {
+            if (!now.get().isBefore(sessionExpiresAt)) { // 실제 발급기(JwtAccessTokenService)와 같은 검사
+                throw new IllegalArgumentException("이미 끝난 로그인 세션이다");
+            }
+            return new IssuedAccessToken("jwt", sessionExpiresAt);
+        }, moving, () -> "N".repeat(43));
+
+        assertThatThrownBy(() -> racing.refresh(REFRESH))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.errorCode()).isEqualTo(MemberErrorCode.REFRESH_INVALID));
+        assertThat(sessions.rotations).isEmpty();
+    }
+
+    @Test
+    void issuerRejectingBecauseTheSessionJustEndedIsRefreshInvalid() { // 재확인 뒤 발급 순간에 만료(catch 분기)
+        java.util.concurrent.atomic.AtomicReference<Instant> now = new java.util.concurrent.atomic.AtomicReference<>(NOW);
+        Instant expires = NOW.plusSeconds(1);
+        active(1L);
+        sessions.put(SID, 1L, REFRESH_HASH, expires);
+        RefreshService racing = new RefreshService(members, sessions, (memberId, role, sessionId, sessionExpiresAt) -> {
+            now.set(sessionExpiresAt); // 발급기 안에서 시각이 만료에 닿는다
+            throw new IllegalArgumentException("이미 끝난 로그인 세션이다");
+        }, movingClock(now), () -> "N".repeat(43));
+
+        assertThatThrownBy(() -> racing.refresh(REFRESH))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.errorCode()).isEqualTo(MemberErrorCode.REFRESH_INVALID));
+        assertThat(sessions.rotations).isEmpty();
+    }
+
+    @Test
+    void issuerRejectionForAnotherReasonStaysAnInternalError() { // 만료가 아닌 발급 거부는 401로 숨기지 않는다
+        active(1L);
+        sessions.put(SID, 1L, REFRESH_HASH, SESSION_EXPIRES);
+        RefreshService broken = new RefreshService(members, sessions, (memberId, role, sessionId, sessionExpiresAt) -> {
+            throw new IllegalArgumentException("Access Token 발급 값이 잘못됐다");
+        }, Clock.fixed(NOW, ZoneOffset.UTC), () -> "N".repeat(43));
+
+        assertThatThrownBy(() -> broken.refresh(REFRESH))
+                .isInstanceOf(IllegalArgumentException.class)
+                .isNotInstanceOf(BusinessException.class);
+        assertThat(sessions.rotations).isEmpty();
+    }
+
+    private static Clock movingClock(java.util.concurrent.atomic.AtomicReference<Instant> now) {
+        return new Clock() {
+            @Override
+            public java.time.ZoneId getZone() {
+                return ZoneOffset.UTC;
+            }
+
+            @Override
+            public Clock withZone(java.time.ZoneId zone) {
+                return this;
+            }
+
+            @Override
+            public Instant instant() {
+                return now.get();
+            }
+        };
+    }
+
     private void assertRefreshInvalid(String token) {
         assertThatThrownBy(() -> service.refresh(token))
                 .as("token=%s", token == null ? "null" : token.length())

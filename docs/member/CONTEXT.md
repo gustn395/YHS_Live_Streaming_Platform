@@ -16,7 +16,7 @@
 
 - 일반 회원가입(MB-W04): 방문자가 username·비밀번호·이메일·닉네임으로 가입하면 PENDING 회원이 생긴다([MB-D003](decisions.md#1-확정-결정)). 토큰은 발급하지 않는다.
 - 로그인(MB-W06~W08, BE-03): 방문자가 username·비밀번호로 1차 인증을 통과하면 OTP Challenge가 생기고 이메일로 OTP를 받는다. OTP를 확인하면 로그인 세션과 토큰이 발급되고, PENDING 회원은 ACTIVE가 된다([MB-D011](decisions.md#1-확정-결정), [MB-D015](decisions.md#1-확정-결정)).
-- Refresh(MB-W09, BE-04): 회원이 Refresh Token으로 같은 로그인 세션을 연장하고 새 Access·Refresh Token을 받는다. Refresh마다 회원 상태를 다시 확인한다([MB-D020](decisions.md#1-확정-결정), [MB-D021](decisions.md#1-확정-결정)).
+- Refresh(MB-W09, BE-04): 회원이 Refresh Token으로 같은 로그인 세션에서 새 Access·Refresh Token을 받는다. 로그인 세션의 절대 만료 시각(최초 로그인 + 7일)은 그대로이고 늘어나지 않는다. Refresh마다 회원 상태를 다시 확인한다([MB-D020](decisions.md#1-확정-결정), [MB-D021](decisions.md#1-확정-결정)).
 - 로그아웃(MB-W10, BE-04): 회원이 이 브라우저가 쥔 로그인 세션을 서버에서 폐기하고 인증 쿠키를 지운다([MB-D022](decisions.md#1-확정-결정)).
 - Google 로그인: BE-05.
 
