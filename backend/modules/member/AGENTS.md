@@ -34,5 +34,5 @@ member 모듈 전용 규칙만 둔다. 공통 규칙은 [루트 AGENTS.md](../..
 ## 6. 미정 규칙 상태
 
 - [MB-U01](../../../docs/member/decisions.md#2-미결) 인증 방식 — 확정([MB-D002](../../../docs/member/decisions.md#1-확정-결정)). 쿠키·JWT 세부는 [MB-D012~MB-D014](../../../docs/member/decisions.md#1-확정-결정)에서 확정.
-- 남은 member 미결: [MB-U02, MB-U04, MB-U06](../../../docs/member/decisions.md#2-미결). MB-U03(HIBP)은 [MB-D010](../../../docs/member/decisions.md#1-확정-결정), MB-U05(가입 Rate Limit)는 [MB-D018](../../../docs/member/decisions.md#1-확정-결정)으로 확정.
+- 남은 member 미결: [MB-U02, MB-U04, MB-U06, MB-U07](../../../docs/member/decisions.md#2-미결). MB-U03(HIBP)은 [MB-D010](../../../docs/member/decisions.md#1-확정-결정), MB-U05(가입 Rate Limit)는 [MB-D018](../../../docs/member/decisions.md#1-확정-결정)으로 확정.
 - [G-U01](../../../docs/policy.md#4-공통-미결) DB 연동 테스트 방식 — 확정([G-D009](../../../docs/policy.md#3-공통-결정-이력)). 영속성 테스트 규칙은 BE-02(MB-W01)에서 정한다.

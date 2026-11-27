@@ -4,7 +4,7 @@ import com.yhs.livestreaming.global.error.ErrorCode;
 import org.springframework.http.HttpStatus;
 
 /**
- * member 모듈 오류 코드(G-D003, MB-D008, MB-D010, MB-D011, MB-D015~D017). detail은 사용자에게 보여 줄 기본 문구다.
+ * member 모듈 오류 코드(G-D003, MB-D008, MB-D010, MB-D011, MB-D015~D017, MB-D020). detail은 사용자에게 보여 줄 기본 문구다.
  * 로그인·OTP 코드는 인증 흐름 코드라 {@code AUTH_} 접두사를 쓴다(이름은 BE-03 ④ 승인).
  */
 public enum MemberErrorCode implements ErrorCode {
@@ -27,7 +27,9 @@ public enum MemberErrorCode implements ErrorCode {
     OTP_CHALLENGE_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_OTP_CHALLENGE_INVALID",
             "인증 시간이 지났습니다. 다시 로그인해 주세요."),
     OTP_DELIVERY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "MEMBER_OTP_DELIVERY_UNAVAILABLE",
-            "지금은 인증 메일을 보낼 수 없습니다. 잠시 후 다시 시도해 주세요.");
+            "지금은 인증 메일을 보낼 수 없습니다. 잠시 후 다시 시도해 주세요."),
+    // Refresh(MB-D020·D021): 쿠키 없음·모르는 토큰·만료·재사용 탐지·회원 없음·PENDING을 한 코드로 응답한다
+    REFRESH_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_REFRESH_INVALID", "로그인이 만료되었습니다. 다시 로그인해 주세요.");
 
     /** OTP 시도 횟수를 다 쓴 경우의 안내(코드는 {@link #OTP_EXPIRED}와 같고 문구만 다르다). */
     public static final String OTP_EXHAUSTED_DETAIL = "인증 번호 입력 횟수를 모두 사용했습니다. 인증 번호를 다시 받아 주세요.";

@@ -39,6 +39,18 @@ public class AuthCookieWriter {
                 remaining(sessionExpiresAt));
     }
 
+    /** Access·Refresh 쿠키 삭제(Refresh 실패 401·403, MB-D020). */
+    public void clearTokens(HttpServletResponse response) {
+        add(response, AuthCookieNames.ACCESS_TOKEN, "", "/", Duration.ZERO);
+        add(response, MemberAuthCookies.REFRESH_TOKEN, "", MemberAuthCookies.REFRESH_TOKEN_PATH, Duration.ZERO);
+    }
+
+    /** 로그아웃: Access·Refresh·OTP Challenge 쿠키 삭제(MB-D022). */
+    public void clearAll(HttpServletResponse response) {
+        clearTokens(response);
+        clearChallenge(response);
+    }
+
     private Duration remaining(Instant expiresAt) {
         long millis = Math.max(0, Duration.between(clock.instant(), expiresAt).toMillis());
         return Duration.ofSeconds((millis + 999) / 1000);

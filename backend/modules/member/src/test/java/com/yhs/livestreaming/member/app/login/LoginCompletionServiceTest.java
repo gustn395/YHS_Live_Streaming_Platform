@@ -32,12 +32,15 @@ class LoginCompletionServiceTest {
     private final Deque<CreateResult> createResults = new ArrayDeque<>();
     private RuntimeException storeFailure;
     private final List<String> issuedFor = new ArrayList<>();
-    private final LoginCompletionService service = new LoginCompletionService(members, session -> {
-        if (storeFailure != null) {
-            throw storeFailure;
+    private final LoginCompletionService service = new LoginCompletionService(members, new FakeLoginSessions() {
+        @Override
+        public CreateResult create(NewLoginSession session) {
+            if (storeFailure != null) {
+                throw storeFailure;
+            }
+            stored.add(session);
+            return createResults.isEmpty() ? CreateResult.CREATED : createResults.pop();
         }
-        stored.add(session);
-        return createResults.isEmpty() ? CreateResult.CREATED : createResults.pop();
     }, (memberId, role, sessionId, sessionExpiresAt) -> {
         issuedFor.add(memberId + ":" + role + ":" + sessionId);
         return new IssuedAccessToken("jwt-" + sessionId, NOW.plus(Duration.ofMinutes(15)));

@@ -54,4 +54,15 @@ public class MemberLoginConfig {
                                                   AccessTokenIssuer accessTokenIssuer, Clock clock) {
         return new LoginCompletionService(members, sessions, accessTokenIssuer, clock);
     }
+
+    @Bean
+    RefreshService refreshService(MemberRepository members, LoginSessionStore sessions,
+                                  AccessTokenIssuer accessTokenIssuer, Clock clock) {
+        return new RefreshService(members, sessions, accessTokenIssuer, clock, RandomTokens::newToken);
+    }
+
+    @Bean
+    LogoutService logoutService(LoginSessionStore sessions) {
+        return new LogoutService(sessions);
+    }
 }

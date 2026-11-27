@@ -54,6 +54,23 @@ class MemberLimitPropertiesTest {
     }
 
     @Test
+    void refreshDefaultsToOneHundredTwentyPerTenMinutesAndAcceptsPartialSettings() { // MB-T040, MB-D020
+        runner.run(context -> {
+            MemberLimitProperties limits = context.getBean(MemberLimitProperties.class);
+            assertThat(limits.refresh()).isEqualTo(new MemberLimitProperties.Window(120, Duration.ofMinutes(10)));
+            assertThat(limits.window(RateLimitScope.REFRESH)).isEqualTo(limits.refresh());
+        });
+        runner.withPropertyValues("member.limits.refresh.max=200")
+                .run(context -> assertThat(context.getBean(MemberLimitProperties.class).refresh())
+                        .isEqualTo(new MemberLimitProperties.Window(200, Duration.ofMinutes(10))));
+        runner.withPropertyValues("member.limits.refresh.window=5m")
+                .run(context -> assertThat(context.getBean(MemberLimitProperties.class).refresh())
+                        .isEqualTo(new MemberLimitProperties.Window(120, Duration.ofMinutes(5))));
+        runner.withPropertyValues("member.limits.refresh.max=0")
+                .run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
     void maxBelowOneFailsStartup() {
         runner.withPropertyValues("member.limits.login.max=0")
                 .run(context -> assertThat(context).hasFailed());

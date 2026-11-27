@@ -16,7 +16,9 @@
 
 - 일반 회원가입(MB-W04): 방문자가 username·비밀번호·이메일·닉네임으로 가입하면 PENDING 회원이 생긴다([MB-D003](decisions.md#1-확정-결정)). 토큰은 발급하지 않는다.
 - 로그인(MB-W06~W08, BE-03): 방문자가 username·비밀번호로 1차 인증을 통과하면 OTP Challenge가 생기고 이메일로 OTP를 받는다. OTP를 확인하면 로그인 세션과 토큰이 발급되고, PENDING 회원은 ACTIVE가 된다([MB-D011](decisions.md#1-확정-결정), [MB-D015](decisions.md#1-확정-결정)).
-- Refresh·로그아웃: BE-04. Google 로그인: BE-05.
+- Refresh(MB-W09, BE-04): 회원이 Refresh Token으로 같은 로그인 세션에서 새 Access·Refresh Token을 받는다. 로그인 세션의 절대 만료 시각(최초 로그인 + 7일)은 그대로이고 늘어나지 않는다. Refresh마다 회원 상태를 다시 확인한다([MB-D020](decisions.md#1-확정-결정), [MB-D021](decisions.md#1-확정-결정)).
+- 로그아웃(MB-W10, BE-04): 회원이 이 브라우저가 쥔 로그인 세션을 서버에서 폐기하고 인증 쿠키를 지운다([MB-D022](decisions.md#1-확정-결정)).
+- Google 로그인: BE-05.
 
 ## 4. 모듈 용어
 
@@ -32,3 +34,5 @@
 | 1차 인증(primary authentication) | 로그인에서 username·비밀번호를 확인하는 단계. 성공해도 로그인이 끝난 것이 아니며 토큰을 주지 않는다 |
 | OTP Challenge | 1차 인증을 통과하고 OTP 확인을 기다리는 상태. 불투명 난수로 식별하고, 이것으로는 보호 API를 쓸 수 없다 |
 | OTP | 이메일로 보내는 4자리 일회용 확인 번호. 한 Challenge 안에서 재발송하면 이전 OTP는 무효가 된다 |
+| Refresh Token 교체(Rotation) | Refresh할 때마다 새 Refresh Token을 주고 이전 토큰을 다시 쓸 수 없게 하는 것. 로그인 세션(sid)과 절대 만료 시각은 그대로다 |
+| 재사용 탐지(reuse detection) | 이미 교체된(사용된) Refresh Token이 다시 제출되면 탈취 가능성으로 보고 그 로그인 세션 전체를 폐기하는 것 |
