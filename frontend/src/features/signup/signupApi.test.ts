@@ -73,6 +73,20 @@ describe('submitSignup 201 계약', () => {
     expect(calls).toHaveLength(1);
   });
 
+  // CR-6: 201만 성공이다. 정상 본문이어도 다른 2xx는 invalid-response(재전송 없음)
+  it.each([200, 202])('%s + 정상 본문 → invalid-response, 재전송 없음', async (status) => {
+    document.cookie = 'XSRF-TOKEN=t1; path=/';
+    const calls = captureSignup(() => HttpResponse.json({ memberId: 7, accountStatus: 'PENDING' }, { status }));
+    expect(await failureOf(submitSignup(createApiClient(), INPUT))).toEqual({ kind: 'invalid-response', status });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('204(본문 없음) → invalid-response', async () => {
+    document.cookie = 'XSRF-TOKEN=t1; path=/';
+    captureSignup(() => new HttpResponse(null, { status: 204 }));
+    expect(await failureOf(submitSignup(createApiClient(), INPUT))).toEqual({ kind: 'invalid-response', status: 204 });
+  });
+
   it('network 오류는 재전송하지 않는다', async () => {
     document.cookie = 'XSRF-TOKEN=t1; path=/';
     const calls = captureSignup(() => HttpResponse.error());

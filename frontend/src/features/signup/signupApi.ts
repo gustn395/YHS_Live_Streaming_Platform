@@ -7,8 +7,9 @@ export interface SignupResult {
   accountStatus: 'PENDING';
 }
 
-/** 201 본문 계약 검사(FE-D031). 어긋나면 던져서 공통 Client가 invalid-response로 바꾼다. */
-function parseSignupResult(data: unknown): SignupResult {
+/** 201 상태·본문 계약 검사(FE-D031). 201이 아니거나 본문이 어긋나면 던져서 공통 Client가 invalid-response로 바꾼다. */
+function parseSignupResult(data: unknown, status: number): SignupResult {
+  if (status !== 201) throw new Error('가입 응답 상태 오류');
   if (typeof data !== 'object' || data === null) throw new Error('가입 응답 형식 오류');
   const { memberId, accountStatus } = data as Record<string, unknown>;
   if (typeof memberId !== 'number' || !Number.isSafeInteger(memberId) || memberId < 1) throw new Error('memberId 형식 오류');

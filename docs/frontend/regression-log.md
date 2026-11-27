@@ -279,3 +279,29 @@ Backend 기준을 `origin/main`(`cea2deb`, BE-04 #19 포함)이 아닌 `d47736c`
 - 미확인: Safari, CSRF 토큰 값이 갱신됐는지(Backend는 쿠키가 있으면 같은 값을 쓴다), 429 때 버튼 비활성 상태.
 - 정리: Frontend·Backend 프로세스 종료(TaskStop 뒤 남은 Java PID 24848·Vite PID 16312를 명령줄로 확인하고 종료), 컨테이너 3개 정지(`--rm`로 삭제),
   포트 18080·5173·15432·16379·11025·18025 해제 확인. 다른 컨테이너는 건드리지 않았다.
+
+### 2026-11-27 FE-03(Issue #20) CodeRabbit 리뷰 반영 — 기준 커밋 acf2c7e + 작업 트리(커밋 전)
+
+대상: CodeRabbit CR-1~CR-10(CR-7 거부·주석만), 결정 [FE-D032](decisions.md#1-확정-결정). 모두 Claude가 실행했고 Backend는 실행하지 않았다.
+
+| 단계 | 명령 | 결과 |
+| --- | --- | --- |
+| RED | `npx vitest run src/features/signup src/shared/api/apiClient.test.ts` | 새 테스트 10건 실패(기대한 이유): signupApi 200·202 성공 처리, apiClient parse 상태 코드 미전달, CR-4 토글 글자, CR-3 포커스, CR-5 서버 오류 필드 재검사, CR-6 폼 200, CR-9 400 + 중복 코드, CR-10 2건 |
+| 처음부터 통과(RED 아님) | 같은 명령 | CR-2 부재 단언 보강 2건, CR-8 비CSRF 403, CR-10 유출 오류 유지, signupApi 204 |
+| GREEN | 같은 명령 | 144건 통과 |
+| Mutation | 임시 변경 뒤 해당 테스트만 실행, 파일 복원(`cmp` 일치) | 늦은 오류 필터 끔 → CR-2 테스트 실패. 403에서 배너 없이 종료 → CR-8 실패. 유출 오류 의존에 username 추가 → CR-10 유지 테스트 실패. 상태 201 검사 제거·이어서 null 본문 검사 제거 → 204 테스트는 계속 통과(본문 형식 검사가 따로 막음). 상태 검사 자체는 200·202 RED로 확인 |
+| S5 | `npm --prefix frontend run lint` | 종료 0 |
+| S5 | `npm --prefix frontend run typecheck` | 종료 0 |
+| S5 | `npm --prefix frontend run test -- --run` | 23파일 392건 통과(FE-01 포함 전체) |
+| S6 반영 | 제품 코드 주석의 CR 번호를 결정 ID로 교체 뒤 lint·typecheck·test·build | 종료 0, 392건 통과, build 0 |
+| S6 재리뷰 Q1=a RED | `npm --prefix frontend run test -- --run src/features/signup/SignupForm.test.tsx -t "유출 코드라도 400이 아니면"` | 1건 실패(기대한 이유: 409 + 유출 코드에 공통 배너 없음) |
+| S6 재리뷰 Q1=a GREEN·S5 | lint·typecheck·`test -- --run`·build | 종료 0, 23파일 393건 통과, build 0 |
+| S5(최종) | lint·typecheck·`test -- --run`·build, 보이지 않는 문자 검사, `git diff --check` | 종료 0, 23파일 393건 통과, build 0, 0건, 오류 없음 |
+
+- S7(이해도 퀴즈)은 사용자 결정으로 생략했다(질문 1/6만 출제, 답 없음). Skill 게이트 확인은 S7 미완료 1건으로 종료 코드 1이다.
+| S5 | `npm --prefix frontend run build` | 종료 0, check-dist 가안 표지 없음 |
+| S5 | 보이지 않는 문자 검사(Python, `frontend/src`·`docs/frontend`), `git diff --check` | 0건, 오류 없음 |
+
+- 수 집계용 JSON 실행(`npm --prefix frontend exec -- vitest run --reporter=json`)은 저장소 루트에서 실행돼 Vitest 설정(jsdom)을 읽지 못하고
+  167건이 `document is not defined`로 실패했다. 실행 방법 오류라 결과로 쓰지 않고 파일별 테스트 수만 셌다.
+- 미실행: CR-1(`overflow-wrap: anywhere`) 긴 아이디 안내 줄바꿈과 토글 눌림 스타일의 브라우저 수동 확인. 실제 Backend 연동(M-02) 재실행.

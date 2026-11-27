@@ -109,6 +109,21 @@ describe('접근성', () => {
     expect(confirmToggle).toHaveAttribute('aria-pressed', 'false');
   });
 
+  // CR-4(FE-03 Phase 5 Q1=a): 보이는 글자는 늘 "표시", 상태는 aria-pressed, 이름은 보이는 글자를 포함하고 필드별로 다르다
+  it('토글을 눌러도 보이는 글자와 접근 가능한 이름은 바뀌지 않고 상태만 aria-pressed로 바뀐다', async () => {
+    const { user } = renderForm();
+    const toggle = screen.getByRole('button', { name: '비밀번호 표시' });
+    const confirmToggle = screen.getByRole('button', { name: '비밀번호 확인 표시' });
+    expect(toggle).toHaveTextContent(/^표시$/);
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await user.click(toggle);
+    expect(toggle).toHaveTextContent(/^표시$/);
+    expect(toggle).toHaveAccessibleName('비밀번호 표시');
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(confirmToggle).toHaveTextContent(/^표시$/);
+    expect(confirmToggle).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('비밀번호 붙여넣기를 막지 않는다', async () => {
     const { user } = renderForm();
     await user.click(field(/^비밀번호$/));
@@ -307,6 +322,8 @@ describe('늦은 서버 응답과 바뀐 입력', () => {
     await held.arrived;
     fireEvent.change(field('아이디'), { target: { value: 'tester02' } });
     await held.release();
+    // CR-2: 응답 처리가 끝났다는 증거(낡은 결과 안내 문구)를 확인한 뒤 부재를 단언한다
+    expect(await screen.findByRole('status')).toHaveTextContent('입력이 바뀌어 이전 확인 결과는 표시하지 않았습니다');
     expect(screen.queryByText(/이미 사용 중인 아이디/)).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -341,6 +358,7 @@ describe('늦은 서버 응답과 바뀐 입력', () => {
     await held.arrived;
     fireEvent.change(field('아이디'), { target: { value: 'tester02' } });
     await held.release();
+    expect(await screen.findByRole('status')).toHaveTextContent('입력이 바뀌어 이전 확인 결과는 표시하지 않았습니다');
     expect(screen.queryByText('서버 비밀번호 오류')).not.toBeInTheDocument();
   });
 
@@ -561,6 +579,102 @@ describe('제출 가드와 정리', () => {
     await waitFor(() => expect(aborted).toBe(true));
     expect(onSuccess).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+});
+
+// FE-T026(Phase 5 CodeRabbit 반영)
+describe('CodeRabbit 반영', () => {
+  it('CR-3: 서버 오류가 와도 화면에서 더 앞에 있는 클라이언트 오류 필드로 포커스를 옮긴다', async () => {
+    const held = heldResponse(400, { code: 'COMMON_INVALID_INPUT', errors: [{ field: 'email', message: '서버 이메일 오류' }] });
+    const { user } = renderForm();
+    await fillValid(user);
+    await user.click(submit());
+    await held.arrived;
+    fireEvent.change(field('아이디'), { target: { value: 'ab' } });
+    fireEvent.blur(field('아이디'));
+    expect(screen.getByText(MESSAGES.usernamePattern)).toBeInTheDocument();
+    await held.release();
+    expect(await screen.findByText('서버 이메일 오류')).toBeInTheDocument();
+    expect(field('아이디')).toHaveFocus();
+  });
+
+  it('CR-5: 서버 오류가 표시됐던 필드는 blur 없이도 입력할 때마다 다시 검사한다', async () => {
+    respond(409, { code: 'MEMBER_USERNAME_DUPLICATE' });
+    const { user } = renderForm();
+    await fillValid(user);
+    await user.click(submit());
+    expect(await screen.findByText(/이미 사용 중인 아이디/)).toBeInTheDocument();
+    fireEvent.change(field('아이디'), { target: { value: 'ab' } });
+    expect(screen.queryByText(/이미 사용 중인 아이디/)).not.toBeInTheDocument();
+    expect(screen.getByText(MESSAGES.usernamePattern)).toBeInTheDocument();
+  });
+
+  it('CR-6: 201이 아닌 2xx(200)는 성공으로 보지 않고 결과 불명 안내만 한다', async () => {
+    respond(200, { memberId: 9, accountStatus: 'PENDING' }, {});
+    const { user, onSuccess } = renderForm();
+    await fillValid(user);
+    await user.click(submit());
+    expect(await screen.findByText(/이미 가입됐을 수 있으니/)).toBeInTheDocument();
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it('CR-8(Q2=a): CSRF가 아닌 403은 화면에 머물러 공통 배너를 보이고 입력을 유지한다', async () => {
+    respond(403, { code: 'AUTH_ACCESS_DENIED' });
+    const { user } = renderForm();
+    await fillValid(user);
+    await user.click(submit());
+    expect(await screen.findByText('가입하지 못했습니다. 잠시 뒤 다시 시도해 주세요.')).toBeInTheDocument();
+    expect(screen.queryByText(/보안 확인이 만료/)).not.toBeInTheDocument();
+    expect(field('아이디')).toHaveValue(VALID.username);
+  });
+
+  it('CR-9: 중복 코드라도 409가 아니면 중복 안내를 하지 않는다', async () => {
+    respond(400, { code: 'MEMBER_USERNAME_DUPLICATE' });
+    const { user } = renderForm();
+    await fillValid(user);
+    await user.click(submit());
+    expect(await screen.findByText('가입하지 못했습니다. 잠시 뒤 다시 시도해 주세요.')).toBeInTheDocument();
+    expect(screen.queryByText(/이미 사용 중인 아이디/)).not.toBeInTheDocument();
+  });
+
+  // S6 재리뷰 Q1=a: CR-9과 같은 원칙으로 유출 코드도 Backend 계약 상태(400)일 때만 필드 안내한다(FE-D032)
+  it('유출 코드라도 400이 아니면 유출 안내를 하지 않고 공통 배너를 보인다', async () => {
+    respond(409, { code: 'MEMBER_PASSWORD_BREACHED' });
+    const { user } = renderForm();
+    await fillValid(user);
+    await user.click(submit());
+    expect(await screen.findByText('가입하지 못했습니다. 잠시 뒤 다시 시도해 주세요.')).toBeInTheDocument();
+    expect(screen.queryByText(/알려진 유출 비밀번호/)).not.toBeInTheDocument();
+  });
+
+  it('CR-10: 아이디를 바꾸면 아이디에 의존하는 비밀번호 서버 오류(errors[])를 지운다', async () => {
+    respond(400, { code: 'COMMON_INVALID_INPUT', errors: [{ field: 'password', message: '서버 비밀번호 오류' }] });
+    const { user } = renderForm();
+    await fillValid(user);
+    await user.click(submit());
+    expect(await screen.findByText('서버 비밀번호 오류')).toBeInTheDocument();
+    fireEvent.change(field('아이디'), { target: { value: 'tester02' } });
+    expect(screen.queryByText('서버 비밀번호 오류')).not.toBeInTheDocument();
+  });
+
+  it('CR-10: 비밀번호에만 의존하는 유출 오류는 아이디를 바꿔도 유지한다', async () => {
+    respond(400, { code: 'MEMBER_PASSWORD_BREACHED' });
+    const { user } = renderForm();
+    await fillValid(user);
+    await user.click(submit());
+    expect(await screen.findByText(/알려진 유출 비밀번호/)).toBeInTheDocument();
+    fireEvent.change(field('아이디'), { target: { value: 'tester02' } });
+    expect(screen.getByText(/알려진 유출 비밀번호/)).toBeInTheDocument();
+  });
+
+  it('CR-10: 비밀번호를 바꾸면 비밀번호에도 의존하는 확인 서버 오류를 지운다', async () => {
+    respond(400, { code: 'COMMON_INVALID_INPUT', errors: [{ field: 'passwordConfirm', message: '서버 확인 오류' }] });
+    const { user } = renderForm();
+    await fillValid(user);
+    await user.click(submit());
+    expect(await screen.findByText('서버 확인 오류')).toBeInTheDocument();
+    fireEvent.change(field(/^비밀번호$/), { target: { value: `${VALID.password}!` } });
+    expect(screen.queryByText('서버 확인 오류')).not.toBeInTheDocument();
   });
 });
 

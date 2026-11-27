@@ -57,7 +57,11 @@ const TEXT = {
 /** 브라우저 setTimeout 최대 지연(2^31-1ms). 넘으면 즉시 실행되므로 마감 시각까지 나눠 기다린다. */
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 
-/** 지금부터 seconds초 뒤의 마감 시각(ms). 이벤트 처리 중에만 부른다. */
+/**
+ * 지금부터 seconds초 뒤의 마감 시각(ms). 이벤트 처리 중에만 부른다.
+ * Date.now(벽시계)를 쓴다: performance.now는 플랫폼에 따라 절전 중 멈춰 서버 기준으로 풀린 뒤에도 버튼을 막을 수 있다.
+ * 시스템 시각을 바꾸면 흔들리지만, 이 대기는 안내용이고 최종 판단은 서버다(FE-D025, FE-D032).
+ */
 function deadlineAfter(seconds: number): number {
   return Date.now() + seconds * 1000;
 }
@@ -122,6 +126,8 @@ export function SignupForm({ client, onSuccess }: { client: ApiClient; onSuccess
   const valuesRef = useRef<SignupInput>(EMPTY);
   const clientErrorsRef = useRef<SignupFieldErrors>({});
   const serverErrorsRef = useRef<SignupFieldErrors>({});
+  /** 서버 오류마다 판정에 쓰인 입력(의존 필드). 그 입력이 바뀌면 오류가 낡으므로 지운다(FE-D032). */
+  const serverDepsRef = useRef<Partial<Record<SignupField, readonly SignupField[]>>>({});
   const submittingRef = useRef(false);
   const blockedUntilRef = useRef(0);
   const inputs = useRef<Partial<Record<SignupField, HTMLInputElement | null>>>({});
@@ -164,13 +170,20 @@ export function SignupForm({ client, onSuccess }: { client: ApiClient; onSuccess
     const next = { ...valuesRef.current, [name]: value };
     valuesRef.current = next;
     setValues(next);
-    const nextServer: SignupFieldErrors = { ...serverErrorsRef.current };
-    delete nextServer[name];
-    // 오류가 표시된 필드만 입력할 때마다 다시 검사한다. 다른 필드에 따라 바뀌는 비밀번호·확인도 함께 본다(FE-D022)
+    const currentServer = serverErrorsRef.current;
     const currentClient = clientErrorsRef.current;
+    // 바뀐 입력에 의존하던 서버 오류를 지운다(아이디가 바뀌면 문맥 단어가 섞일 수 있는 비밀번호 errors[]도, FE-D032)
+    const nextServer: SignupFieldErrors = {};
+    for (const field of SIGNUP_FIELDS) {
+      const message = currentServer[field];
+      if (message === undefined) continue;
+      const deps = serverDepsRef.current[field] ?? [field];
+      if (!deps.includes(name)) nextServer[field] = message;
+    }
+    // 오류(클라이언트 또는 서버)가 표시됐던 필드는 입력할 때마다 다시 검사한다. 다른 필드에 따라 바뀌는 비밀번호·확인도 함께 본다(FE-D022)
     const nextClient: SignupFieldErrors = { ...currentClient };
     for (const shown of SIGNUP_FIELDS) {
-      if (currentClient[shown] === undefined) continue;
+      if (currentClient[shown] === undefined && currentServer[shown] === undefined) continue;
       const message = validateField(shown, next);
       if (message === null) delete nextClient[shown];
       else nextClient[shown] = message;
@@ -190,19 +203,25 @@ export function SignupForm({ client, onSuccess }: { client: ApiClient; onSuccess
   function applyServerFieldErrors(errors: SignupFieldErrors, submitted: SignupInput, dependsOn = DEPENDS_ON) {
     const current = valuesRef.current;
     const fresh: SignupFieldErrors = {};
+    const deps: Partial<Record<SignupField, readonly SignupField[]>> = {};
     for (const field of SIGNUP_FIELDS) {
       const message = errors[field];
       if (message === undefined) continue;
       const unchanged = dependsOn[field].every((dep) => judgedValue(dep, current) === judgedValue(dep, submitted));
-      if (unchanged) fresh[field] = message;
+      if (unchanged) {
+        fresh[field] = message;
+        deps[field] = dependsOn[field];
+      }
     }
+    serverDepsRef.current = deps;
     updateErrors(clientErrorsRef.current, fresh);
     if (!hasAnyError(fresh)) {
       // 모두 낡은 결과다. 필드 오류·포커스는 그대로 두고 실패 사실만 조용히 알린다(FE-D031, 재리뷰 Q1=a)
       setBanner({ tone: 'warning', text: TEXT.staleResult, role: 'status' });
       return;
     }
-    announceFieldErrors(fresh);
+    // 포커스는 지금 표시 중인 클라이언트 오류와 새 서버 오류를 합친 목록의 첫 필드로(FE-D028)
+    announceFieldErrors({ ...clientErrorsRef.current, ...fresh });
   }
 
   function blockUntil(seconds: number) {
@@ -251,12 +270,13 @@ export function SignupForm({ client, onSuccess }: { client: ApiClient; onSuccess
       blockUntil(seconds);
       return;
     }
-    if (code === 'MEMBER_PASSWORD_BREACHED') {
+    // 코드와 Backend 계약 상태를 함께 본다(유출 400, 중복 409, FE-D032)
+    if (failure.status === 400 && code === 'MEMBER_PASSWORD_BREACHED') {
       // 유출 여부는 비밀번호에만 달려 있다
       applyServerFieldErrors({ password: TEXT.breached }, submitted, { ...DEPENDS_ON, password: ['password'] });
       return;
     }
-    if (code === 'MEMBER_USERNAME_DUPLICATE' || code === 'MEMBER_EMAIL_DUPLICATE') {
+    if (failure.status === 409 && (code === 'MEMBER_USERNAME_DUPLICATE' || code === 'MEMBER_EMAIL_DUPLICATE')) {
       applyServerFieldErrors(
         code === 'MEMBER_USERNAME_DUPLICATE' ? { username: TEXT.usernameDuplicate } : { email: TEXT.emailDuplicate },
         submitted,
@@ -343,15 +363,16 @@ export function SignupForm({ client, onSuccess }: { client: ApiClient; onSuccess
             onBlur={() => handleBlur(name)}
           />
           {secret && (
+            // 보이는 글자는 늘 "표시", 상태는 aria-pressed와 눌림 스타일로 전달한다. 이름은 보이는 글자를 포함한다(FE-D032, WCAG 2.5.3)
             <button
               type="button"
-              className={styles.toggle}
+              className={shown ? `${styles.toggle} ${styles.togglePressed}` : styles.toggle}
               aria-pressed={shown}
               aria-controls={id}
               aria-label={`${LABELS[name]} 표시`}
               onClick={() => setVisible((current) => ({ ...current, [name]: !current[name] }))}
             >
-              {shown ? '숨기기' : '표시'}
+              표시
             </button>
           )}
         </div>

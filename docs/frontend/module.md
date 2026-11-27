@@ -59,7 +59,7 @@ CSRF 부착·오류 분류·회원가입 화면·스타일 기반이다.
   (`baseURL: '/api'`, `allowAbsoluteUrls: false`, `withXSRFToken: false`, XSRF 쿠키·헤더 이름 빈 값, `withCredentials: false`, XHR 어댑터),
   `clarifyTimeoutError`. 요청 옵션은 `ApiRequest`(method·path·authScope 필수, timeoutMs·signal·data·params)뿐이다. 경로 검증
   `toApiPath`, Timeout 검증 `resolveTimeoutMs`(기본 10000ms, 1~60000 정수), 오류 `ApiError.failure`(`http`(+ `retryAfterSeconds`)·`invalid-response`·
-  `network`·`timeout`·`csrf-unavailable`·`canceled`), `parseRetryAfterSeconds`(1 이상 안전 정수 초만), 응답 형식 검증은 선택 인자 `parse`(동기·비동기, 실패는 `invalid-response`이되 세대가 바뀌었으면 `canceled`, 파싱 뒤 세대를 다시 확인).
+  `network`·`timeout`·`csrf-unavailable`·`canceled`), `parseRetryAfterSeconds`(1 이상 안전 정수 초만), 응답 형식 검증은 선택 인자 `parse(data, status)`(응답 상태 코드도 받음, 동기·비동기, 실패는 `invalid-response`이되 세대가 바뀌었으면 `canceled`, 파싱 뒤 세대를 다시 확인).
   ProblemDetail 판별은 `Content-Type`의 미디어 타입(매개변수 앞)이 정확히 `application/problem+json`일 때만. session 요청은 시작 세대를 기억해 세대가 바뀌면 결과를
   `canceled`로 버리고, 401 `AUTH_UNAUTHENTICATED`이면 `AuthBridge.reportSessionLost(세대)`만 호출한다(이동 없음).
 - CSRF(`src/shared/api/csrfToken.ts` + `apiClient.ts`): POST·PUT·PATCH·DELETE이면 `instance.getUri`로 만든 최종 URL을
@@ -72,11 +72,12 @@ CSRF 부착·오류 분류·회원가입 화면·스타일 기반이다.
 - 오류 표시 분류(`errorPresentation.ts`): forbidden(403, CSRF 제외)·retry-later(503 `AUTH_SESSION_STORE_UNAVAILABLE`)·common(`csrf-unavailable` 포함)·
   caller·csrf-retry(403 `AUTH_CSRF_INVALID`)·silent. `classifyInitFailure`는 `csrf-unavailable`을 `unexpected` initError로 둔다.
 - 회원가입(`src/features/signup/`): `signupValidation.ts`(Backend 규칙 재현 범위는 [FE-D031](decisions.md#1-확정-결정), `javaStrip`·
-  `normalizeUsername`·필드별 검증, 이메일은 마지막 `@` 기준·local part의 따옴표 조각과 그 안의 백슬래시 이스케이프 허용), `signupApi.ts`(`submitSignup`, 201 본문 검사),
-  `SignupForm.tsx`(React state, blur·재검사·제출 시 전체, 서버 오류 코드별 고정 문구, 동기 플래그로 제출 1건, 언마운트 시 요청 취소·타이머 정리).
+  `normalizeUsername`·필드별 검증, 이메일은 마지막 `@` 기준·local part의 따옴표 조각과 그 안의 백슬래시 이스케이프 허용), `signupApi.ts`(`submitSignup`, 상태 201과 본문을 함께 검사),
+  `SignupForm.tsx`(React state, blur·재검사·제출 시 전체, 서버 오류 코드별 고정 문구, 코드별 안내는 계약 상태와 함께(중복 409, 유출 400), CSRF가 아닌 403도 화면에 머물러 공통 배너([FE-D032](decisions.md#1-확정-결정)), 동기 플래그로 제출 1건, 언마운트 시 요청 취소·타이머 정리, 비밀번호 토글은 글자 "표시" 고정·`aria-pressed`·눌림 스타일 `togglePressed`).
   서버 필드 오류는 제출 때 값과 지금 값을 Backend가 판정하는 값(username 소문자, 이메일 strip·소문자, 닉네임 strip, 비밀번호 원문)으로
   비교해 바뀌지 않은 필드에만 붙인다(비밀번호 오류는 아이디에도, 확인 오류는 비밀번호에도 의존, 유출 비밀번호는 비밀번호만). 붙일 오류가 없으면
-  `role="status"` 고정 안내만 보인다. 이벤트 처리는 최신 값·오류 ref(`valuesRef`·`clientErrorsRef`·`serverErrorsRef`) 위에 쌓고,
+  `role="status"` 고정 안내만 보인다. 붙인 서버 오류는 의존 필드를 `serverDepsRef`에 함께 기억해, 입력이 그 의존 필드를 바꾸면 지우고,
+  클라이언트·서버 오류가 표시됐던 필드는 입력마다 다시 검사한다. 서버 오류가 오면 포커스는 표시 중인 클라이언트 오류와 합친 목록의 첫 필드로 옮긴다. 이벤트 처리는 최신 값·오류 ref(`valuesRef`·`clientErrorsRef`·`serverErrorsRef`) 위에 쌓고,
   오류 변경은 입력·blur·제출·서버 응답 모두 `updateErrors` 한 경로로 한다. 오류 요약은 개수 없는 고정 문구 `role="alert"`이고 실패할 때마다
   새 요소로 다시 알리며, 오류가 0건이 되면 꺼진다(다음 제출 실패까지 다시 켜지지 않음). 429는 마감 시각을 기억하고 `setTimeout` 최대값(2^31-1ms) 이하로 나눠
   남은 시간을 다시 계산하며, 마감 전에는 버튼과 submit 이벤트를 모두 막는다. 화면은 `src/app/pages/SignupPage.tsx`(성공 시
