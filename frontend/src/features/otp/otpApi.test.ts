@@ -1,5 +1,5 @@
 import { http, HttpResponse, type JsonBodyType } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../test/msw/server';
 import { createApiClient } from '../../shared/api/apiClient';
 import { ApiError, type ApiFailure } from '../../shared/api/apiError';
@@ -77,10 +77,67 @@ describe('OTP 응답 시각 형식', () => {
     expect(await failureOf(resendOtp(createApiClient()))).toEqual({ kind: 'invalid-response', status: 200 });
   });
 
-  it.each(['2026-11-27T10:05:00Z', '2026-11-27T10:05:00.123Z', '2026-11-27T10:05:00.123456789Z'])('%s는 허용', async (value) => {
+  // 정규식은 모양만 본다. Date.parse는 없는 날짜·시각을 다음 날로 넘기므로 해석 결과가 입력과 같은지 확인한다(CodeRabbit 2차)
+  it.each([
+    ['2월 30일', '2026-02-30T00:00:00Z'],
+    ['4월 31일', '2026-04-31T10:00:00Z'],
+    ['평년 2월 29일', '2023-02-29T00:00:00Z'],
+    ['24시', '2026-11-27T24:00:00Z'],
+  ])('없는 날짜·시각 %s(%s) → invalid-response', async (_name, value) => {
+    document.cookie = 'XSRF-TOKEN=t1; path=/';
+    capture(RESEND, () => HttpResponse.json({ status: 'OTP_REQUIRED', otpExpiresAt: value }));
+    expect(await failureOf(resendOtp(createApiClient()))).toEqual({ kind: 'invalid-response', status: 200 });
+  });
+
+  it.each([
+    '2026-11-27T10:05:00Z',
+    '2026-11-27T10:05:00.123Z',
+    '2026-11-27T10:05:00.123456789Z',
+    '2024-02-29T23:59:59.999999999Z',
+  ])('%s는 허용', async (value) => {
     document.cookie = 'XSRF-TOKEN=t1; path=/';
     capture(RESEND, () => HttpResponse.json({ status: 'OTP_REQUIRED', otpExpiresAt: value }));
     await expect(resendOtp(createApiClient())).resolves.toEqual({ otpExpiresAt: Date.parse(value) });
+  });
+
+  it.each([
+    ['0월', '2026-00-10T00:00:00Z'],
+    ['13월', '2026-13-01T00:00:00Z'],
+    ['0일', '2026-11-00T00:00:00Z'],
+    ['32일', '2026-01-32T00:00:00Z'],
+    ['60분', '2026-11-27T23:60:00Z'],
+    ['60초', '2026-11-27T23:59:60Z'],
+    ['1900년(평년) 2월 29일', '1900-02-29T00:00:00Z'],
+  ])('범위를 넘는 값 %s(%s) → invalid-response', async (_name, value) => {
+    document.cookie = 'XSRF-TOKEN=t1; path=/';
+    capture(RESEND, () => HttpResponse.json({ status: 'OTP_REQUIRED', otpExpiresAt: value }));
+    expect(await failureOf(resendOtp(createApiClient()))).toEqual({ kind: 'invalid-response', status: 200 });
+  });
+
+  // 엔진마다 다른 Date.parse(밀리초를 넘는 소수 초 처리)에 기대지 않고, 0~99년도 1900년대로 바꾸지 않는다(CodeRabbit 2차, Q1=a)
+  describe('엔진의 Date.parse에 기대지 않는 해석', () => {
+    beforeEach(() => {
+      vi.spyOn(Date, 'parse').mockReturnValue(Number.NaN);
+    });
+
+    it.each<[string, number]>([
+      ['2026-11-27T10:05:00Z', Date.UTC(2026, 10, 27, 10, 5, 0)],
+      ['2026-11-27T10:05:59.9999999Z', 1795773959999], // 소수 초는 반올림하지 않고 밀리초로 잘라낸다
+      ['2024-02-29T23:59:59.999999999Z', 1709251199999],
+      ['0000-01-01T00:00:00Z', -62167219200000],
+      ['0050-06-15T12:30:45.123456Z', -60574994954877], // Date.UTC(50, …)는 1950년이 된다
+      ['0099-12-31T23:59:59.999999999Z', -59011459200001],
+    ])('%s → %d', async (value, expected) => {
+      document.cookie = 'XSRF-TOKEN=t1; path=/';
+      capture(RESEND, () => HttpResponse.json({ status: 'OTP_REQUIRED', otpExpiresAt: value }));
+      await expect(resendOtp(createApiClient())).resolves.toEqual({ otpExpiresAt: expected });
+    });
+
+    it('없는 날짜는 Date.parse 없이도 거부한다', async () => {
+      document.cookie = 'XSRF-TOKEN=t1; path=/';
+      capture(RESEND, () => HttpResponse.json({ status: 'OTP_REQUIRED', otpExpiresAt: '2026-02-30T00:00:00Z' }));
+      expect(await failureOf(resendOtp(createApiClient()))).toEqual({ kind: 'invalid-response', status: 200 });
+    });
   });
 
   it('로그인 성공 응답의 accessTokenExpiresAt도 같은 규칙(RFC 1123 거부)', async () => {

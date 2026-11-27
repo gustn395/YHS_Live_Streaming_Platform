@@ -408,3 +408,22 @@ S6(Standards·Spec) 지적 12건 중 수용 1·2·4·5·6·8, Q1(로그인·OTP 
 | S6·S10 | Standards·Spec 하위 리뷰, 보안 리뷰 | Spec 0건, S10 후보 0건, Standards 판단 3건: 1 FE-T030·로그인 경로 테스트 누락(수용: 테스트 2건 추가 — 공용 파서라 처음부터 통과, 형식 검사를 뺀 뮤테이션에서 2건 실패·복원 뒤 89건 통과), 2 형식 규칙 중복(수용: module은 FE-T031을 가리킴), 3 결정 ID 없음(Q1=a: [FE-D043](decisions.md#1-확정-결정) 기록, FE-T030·T031 근거 갱신) |
 
 - 미실행: 실제 Backend E2E 재실행(이번 변경은 응답 시각 형식 검사와 E2E 사전 점검 시간 제한이며, 실제 Backend의 Instant 형식은 이전 E2E 3회에서 통과함).
+
+### 2026-11-27 FE-04(Issue #26) CodeRabbit 2차 리뷰 반영 — 기준 커밋 faf88f4 + 작업 트리(커밋 전)
+
+인라인 1건(`otpApi.ts:26` 없는 날짜 거부)을 지금 코드로 확인하고 수용했다(S8). Backend·Docker는 실행하지 않았다.
+
+| 단계 | 명령 | 결과 |
+| --- | --- | --- |
+| 사실 확인 | `node -e`로 정규식·`Date.parse` 결과 출력 | `2026-02-30`→3월 2일, `2026-04-31`→5월 1일, `2023-02-29`→3월 1일, `T24:00:00`→다음 날 00시로 넘어가 통과. 13월·0월·32일·60분·60초는 이미 NaN으로 거부 |
+| RED | `npx vitest run src/features/otp/otpApi.test.ts` | 4건 실패(위 4개 입력이 통과). 윤일 `2024-02-29T23:59:59.999999999Z`와 기존 정상 3건은 통과 |
+| GREEN | 해석 결과 `toISOString()` 앞 19자(초 단위)를 입력과 비교. `npx vitest run src/features/otp src/features/login` | 94건 통과 |
+| 검증(S5) | `npm run lint` / `typecheck` / `npm test` / `build`, `git diff --check` | 0 / 0 / 32파일 538건 통과 / 0, 오류 없음 |
+| S6·S10 | Standards·Spec 하위 리뷰, 보안 리뷰 | S10 0건, Spec 0건(참고: 밀리초를 넘는 소수 초는 엔진마다 다를 수 있음, Safari·Firefox 미검증), Standards 판단 2건(근거 표기 → "FE-D043 (1) 세부"로 수정, throw 반복 → 아래 재구현으로 정리) |
+| 엔진 의존 제거(Q1=a, 사용자 보완: 없는 날짜 자동 보정·0~99년) | `node -e` 실측 | `Date.UTC(50, …)` → 1950년(0~99년 함정 확인). 기대값은 구현과 무관하게 `setUTCFullYear`·`setUTCHours`로 미리 계산해 테스트에 고정 |
+| RED | `Date.parse`를 NaN으로 바꾼 상태에서 `npx vitest run src/features/otp/otpApi.test.ts` | 6건 실패(정상 시각 6건이 `Date.parse`에 기댐). 범위를 넘는 값 7건(0·13월, 0·32일, 60분·60초, 1900-02-29)은 처음부터 거부 |
+| GREEN | 정규식 그룹으로 연·월·일·시·분·초·소수를 꺼내 `new Date(0)`에 `setUTCFullYear`·`setUTCHours`로 넣고(소수는 밀리초로 잘라냄) 넣은 값과 `getUTC*`를 비교, `npx vitest run src/features/otp src/features/login` | 108건 통과 |
+| Mutation | ① `setUTCFullYear` → `Date.UTC` ② 자동 보정 비교 끄기, 각각 `otpApi.test.ts` 실행 뒤 복원 | ① 0·50·99년 3건 실패 ② 12건 실패 → 복원 뒤 41건 통과 |
+| 검증(S5) | `npm run lint` / `typecheck` / `npm test` / `build`, `git diff --check` | 0 / 0 / 32파일 552건 통과 / 0, 오류 없음 |
+
+- 미실행: 실제 Backend E2E 재실행(정상 Instant 값은 그대로 허용, 이전 E2E 3회에서 통과), Safari·Firefox 확인(이번 재구현으로 엔진의 날짜 문자열 해석에는 기대지 않음).

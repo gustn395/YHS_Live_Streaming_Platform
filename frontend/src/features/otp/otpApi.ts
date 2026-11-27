@@ -16,17 +16,37 @@ export interface LoginPrincipal {
 }
 
 /**
- * Backend Instant의 JSON 형식(ISO-8601 UTC, `Z`, 소수 초 0~9자리). Date.parse는 RFC 1123·날짜만·시간대 없는 지역 시각도
- * 받아들이므로 먼저 이 형식인지 확인한다.
+ * Backend Instant의 JSON 형식(ISO-8601 UTC, `Z`, 소수 초 0~9자리, 규칙 원본은 test-spec FE-T031).
+ * 연·월·일·시·분·초·소수를 그룹으로 꺼낸다.
  */
-const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
+const ISO_INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?Z$/;
 
-/** Backend Instant 형식의 시각 문자열만 받는다. 숫자·빈 값·다른 형식·해석 불가는 거부한다. */
+/**
+ * Backend Instant 형식의 시각 문자열을 epoch ms로 바꾼다. 형식이 다르거나 없는 날짜·시각이면 던진다(FE-D043 (1)).
+ *
+ * Date.parse를 쓰지 않는다: 밀리초를 넘는 소수 초 처리는 엔진마다 달라(잘라냄·반올림·해석 불가) 브라우저에 따라
+ * 결과가 바뀔 수 있다. Date.UTC도 쓰지 않는다: 0~99년을 1900년대로 바꾼다. 대신 setUTCFullYear·setUTCHours로
+ * 값을 그대로 넣고(소수 초는 밀리초로 잘라냄), 2월 30일·24시처럼 자동 보정된 값은 넣은 값과 다시 비교해 거부한다.
+ */
 function parseInstant(value: unknown, name: string): number {
-  if (typeof value !== 'string' || !ISO_INSTANT.test(value)) throw new Error(`${name} 형식 오류`);
-  const ms = Date.parse(value);
-  if (!Number.isFinite(ms)) throw new Error(`${name} 형식 오류`);
-  return ms;
+  const match = typeof value === 'string' ? ISO_INSTANT.exec(value) : null;
+  const fields = match?.slice(1, 7).map(Number);
+  if (match === null || fields === undefined) throw new Error(`${name} 형식 오류`);
+  const [year = Number.NaN, month = Number.NaN, day = Number.NaN, hour = Number.NaN, minute = Number.NaN, second = Number.NaN] = fields;
+  const millis = Number((match[7] ?? '').padEnd(3, '0').slice(0, 3));
+
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  date.setUTCHours(hour, minute, second, millis);
+  const exact =
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day &&
+    date.getUTCHours() === hour &&
+    date.getUTCMinutes() === minute &&
+    date.getUTCSeconds() === second;
+  if (!exact) throw new Error(`${name} 형식 오류`);
+  return date.getTime();
 }
 
 /**

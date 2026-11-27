@@ -38,7 +38,7 @@
 | FE-T028 | 가입 화면 접근성·비밀번호 필드 | `aria-invalid`·`aria-describedby`로 오류 연결, `autocomplete`(username·email·new-password), 비밀번호 토글 2개 독립(`aria-pressed`·type, 보이는 글자는 상태와 무관하게 "표시"이고 이름은 "비밀번호 표시"·"비밀번호 확인 표시"), 붙여넣기 허용, 길이 안내("10~30자, 공백도 쓸 수 있습니다")는 비밀번호 필드에 상시, username 소문자 변환 안내와 입력값 유지 | FE-D023, FE-D028, FE-D031~FE-D033 | `SignupForm.test.tsx`(접근성) |
 | FE-T029 | 가입 경로·링크 | `/signup`은 운영 어댑터(미인증)에서도 공개 경로로 보인다. 홈·로그인 화면에서 가입으로, 가입 화면에서 로그인으로 가는 링크 | FE-D012, FE-U10 | `SignupPage.test.tsx`(가입 경로) |
 | FE-T030 | 로그인 요청·응답 계약 | 본문 `username·password`를 입력 그대로(대문자·31자 이상·앞뒤 공백 유지, 소문자 변환·Trim·길이 검사 없음), CSRF 헤더 포함. 상태 200이고 `status=OTP_REQUIRED`·`otpExpiresAt` ISO 시각(형식 규칙은 FE-T031과 같음, 재발송과 같은 파서)일 때만 성공이고 그 밖(201·202·204, 필드 누락·형식 오류·숫자 시각·본문 없음)은 `invalid-response`·재전송 없음. 401은 http 실패 그대로 | FE-D037, FE-D032, FE-D033 (3), FE-D043 | `loginApi.test.ts` |
-| FE-T031 | OTP 확인·재발송 계약 | 확인 본문은 `{"code":"0420"}`(문자열, 앞자리 0 유지). 200이고 `memberId` 양의 안전한 정수·`role` 비지 않은 문자열·`accessTokenExpiresAt` ISO 시각일 때만 성공. 시각은 Backend Instant 형식(ISO-8601 UTC `Z`, 소수 초 0~9자리)만 받고 RFC 1123·시간대 없음·날짜만·오프셋 표기·소수 초 10자리는 거부(FE-D043). 재발송은 본문 없이 보내고 200 OTP 대기 응답만 성공. 그 밖은 `invalid-response`·재전송 없음 | FE-D034, FE-D035, FE-D043 | `otpApi.test.ts` |
+| FE-T031 | OTP 확인·재발송 계약 | 확인 본문은 `{"code":"0420"}`(문자열, 앞자리 0 유지). 200이고 `memberId` 양의 안전한 정수·`role` 비지 않은 문자열·`accessTokenExpiresAt` ISO 시각일 때만 성공. 시각은 Backend Instant 형식(ISO-8601 UTC `Z`, 소수 초 0~9자리)만 받고 RFC 1123·시간대 없음·날짜만·오프셋 표기·소수 초 10자리는 거부(FE-D043). 형식이 맞아도 없는 날짜·시각(0월·13월·0일·32일·2월 30일·4월 31일·평년 2월 29일(1900·2023)·24시·60분·60초)은 거부하고, 윤일과 소수 초 9자리는 허용. 해석은 엔진의 `Date.parse`에 기대지 않는다(`Date.parse`를 NaN으로 바꿔도 같은 값): 소수 초는 반올림하지 않고 밀리초로 잘라내며(`…59.9999999Z` → 같은 초 999ms), 0~99년과 0년도 그대로 해석한다(1900년대로 바꾸지 않음)(FE-D043 (1) 세부, CodeRabbit 2차). 재발송은 본문 없이 보내고 200 OTP 대기 응답만 성공. 그 밖은 `invalid-response`·재전송 없음 | FE-D034, FE-D035, FE-D043 | `otpApi.test.ts` |
 | FE-T032 | 로그인 성공 전환 | Reducer `LOGIN_SUCCEEDED`: `unauthenticated`(최초·세션 상실 뒤)·`authenticated`에서 세대 +1·주체 교체, `initializing`·다른 세대는 같은 참조. Provider `completeLogin`: 초기화 결과 전이면 false·반영 없음, 성공하면 세대 관리(sessionScope)와 같은 세대로 전이, 로그인 전 세대 session 요청 취소, 로그인 뒤 401은 같은 세대로 세션 상실 반영 | FE-D034, FE-D011, FE-D016 | `authState.test.ts`(LOGIN_SUCCEEDED), `AuthProvider.test.tsx`(로그인 성공 전환) |
 | FE-T033 | 로그인 폼 | 빈 값이면 요청 0건·안내·빈 첫 필드 포커스. 형식·길이 검사 없음. autocomplete `username`·`current-password`, 비밀번호 가림. 401·400은 같은 문구, 403 `MEMBER_ACCOUNT_DISABLED` 안내, CSRF 403 안내, 그 밖의 403·500·형식 오류는 공통 문구로 화면 유지(FE-D040 (2)), 503 재시도 안내, 모든 실패에서 입력 유지. 429 `Retry-After` 동안 버튼·submit 차단 → 지나면 활성(자동 제출 없음), 없으면 시간 없이 안내. 처리 중 submit 여러 번에도 요청 1건, 초기화 중(ready=false) 제출 없음, 다시 제출하면 이전 안내 지움, 화면을 떠나면 결과 반영 없음 | FE-D037, FE-D025, FE-D021, FE-D040 | `LoginForm.test.tsx` |
 | FE-T034 | 로그인 → OTP 이동 | 성공하면 `/login/otp`로 `otpExpiresAt`·재발송 가능 시각·`from`을 history state로 넘긴다. `from`은 RequireAuth가 붙인 `?from=`을 safeRedirect로 검사한 값이고 안전하지 않으면 FE-D012대로 `/` | FE-D036, FE-D012 | `LoginPage.test.tsx`(일반 로그인 흐름) |
@@ -58,7 +58,7 @@
 ## 2. 집계
 
 - 요구사항 39건(FE-T001~FE-T039, FE-T018의 GitHub 실행 검증은 PR 이후) + E2E 4건(E2E-01~03, E2E-ENV) + 수동 3건(M-01~M-03).
-  Vitest 32파일 533건(shared/api 135, shared/time 8, features/auth 97, features/login 44, features/otp 45, features/signup 133, app 32,
+  Vitest 32파일 552건(shared/api 135, shared/time 8, features/auth 97, features/login 44, features/otp 64, features/signup 133, app 32,
   src/test 25, scripts 14). E2E는 Playwright 3건이고 CI에서 실행하지 않는다([FE-U11](decisions.md#2-미결)).
   FE-T001은 명령 실행으로 검증한다. 실행 결과는 [regression-log.md](regression-log.md).
 
