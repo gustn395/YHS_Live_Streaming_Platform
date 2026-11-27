@@ -5,45 +5,56 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.text.Normalizer;
 import org.junit.jupiter.api.Test;
 
-/** MB-T006: 비밀번호 정책(MB-D004, MB-D005). 유출 비밀번호 검사는 HIBP 어댑터가 따로 한다(MB-D010). */
+/** MB-T006: 비밀번호 정책(MB-D026 길이, MB-D004, MB-D005). 유출 비밀번호 검사는 HIBP 어댑터가 따로 한다(MB-D010). */
 class PasswordPolicyTest {
 
     private final PasswordPolicy policy = new PasswordPolicy();
 
     @Test
-    void acceptsFifteenCodePoints() {
-        assertThat(policy.check("abcdefghijklmno", "tester01")).isEmpty();
+    void acceptsTenCodePoints() { // MB-D026 하한 경계
+        assertThat(policy.check("abcdefghij", "tester01")).isEmpty();
     }
 
     @Test
-    void rejectsFourteenCodePoints() {
-        assertThat(policy.check("abcdefghijklmn", "tester01")).containsExactly(PasswordViolation.TOO_SHORT);
+    void rejectsNineCodePoints() {
+        assertThat(policy.check("abcdefghi", "tester01")).containsExactly(PasswordViolation.TOO_SHORT);
     }
 
     @Test
     void countsCodePointsNotUtf16Units() {
-        String fourteenEmoji = "😀".repeat(14); // UTF-16 단위로는 28이지만 code point는 14
-        assertThat(policy.check(fourteenEmoji, "tester01")).containsExactly(PasswordViolation.TOO_SHORT);
-        assertThat(policy.check("😀".repeat(15), "tester01")).isEmpty();
+        String nineEmoji = "😀".repeat(9); // UTF-16 단위로는 18이지만 code point는 9
+        assertThat(policy.check(nineEmoji, "tester01")).containsExactly(PasswordViolation.TOO_SHORT);
+        assertThat(policy.check("😀".repeat(10), "tester01")).isEmpty();
+        assertThat(policy.check("😀".repeat(30), "tester01")).isEmpty(); // UTF-16 단위 60
+        assertThat(policy.check("😀".repeat(31), "tester01")).containsExactly(PasswordViolation.TOO_LONG);
     }
 
     @Test
     void countsLengthAfterNfcNormalization() {
-        String decomposed = Normalizer.normalize("é".repeat(14), Normalizer.Form.NFD); // NFD로는 28 code point
-        assertThat(policy.check(decomposed, "tester01")).containsExactly(PasswordViolation.TOO_SHORT);
+        String nineDecomposed = Normalizer.normalize("é".repeat(9), Normalizer.Form.NFD); // NFD로는 18 code point
+        assertThat(policy.check(nineDecomposed, "tester01")).containsExactly(PasswordViolation.TOO_SHORT);
+        String thirtyDecomposed = Normalizer.normalize("é".repeat(30), Normalizer.Form.NFD); // NFD로는 60 code point
+        assertThat(policy.check(thirtyDecomposed, "tester01")).isEmpty();
     }
 
     @Test
-    void rejectsMoreThanSixtyFourCodePoints() {
-        assertThat(policy.check("a".repeat(64), "tester01")).isEmpty();
-        assertThat(policy.check("a".repeat(65), "tester01")).containsExactly(PasswordViolation.TOO_LONG);
+    void rejectsMoreThanThirtyCodePoints() { // MB-D026 상한 경계
+        assertThat(policy.check("a".repeat(30), "tester01")).isEmpty();
+        assertThat(policy.check("a".repeat(31), "tester01")).containsExactly(PasswordViolation.TOO_LONG);
+    }
+
+    @Test
+    void lengthMessagesStateTenAndThirty() { // MB-D026: 거부 이유 문구(입력값 없음)
+        assertThat(PasswordViolation.TOO_SHORT.message()).isEqualTo("비밀번호는 10자 이상이어야 합니다.");
+        assertThat(PasswordViolation.TOO_LONG.message()).isEqualTo("비밀번호는 30자 이하여야 합니다.");
     }
 
     @Test
     void keepsSpacesAndDoesNotTrim() {
         String withSpaces = "  correct horse  "; // 앞뒤 공백 포함 17자
         assertThat(policy.check(withSpaces, "tester01")).isEmpty();
-        assertThat(policy.check("  abcdefghijk  ", "tester01")).isEmpty(); // Trim하면 11자지만 그대로 15자
+        assertThat(policy.check("  abcdef  ", "tester01")).isEmpty(); // Trim하면 6자지만 그대로 10자
+        assertThat(policy.check("abcdefgh ", "tester01")).containsExactly(PasswordViolation.TOO_SHORT); // 공백 포함 9자
     }
 
     @Test

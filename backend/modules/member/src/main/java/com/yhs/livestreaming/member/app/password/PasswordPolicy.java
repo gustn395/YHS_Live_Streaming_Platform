@@ -7,7 +7,8 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * 비밀번호 정책(MB-D004, MB-D005). NFC 정규화 뒤 code point 기준 15~64자, 구성 규칙 없음, 공백 허용, Trim 없음.
+ * 비밀번호 정책(MB-D026 길이, MB-D004, MB-D005). NFC 정규화 뒤 code point 기준 10~30자, 구성 규칙 없음, 공백 허용, Trim 없음.
+ * 새로 설정하는 비밀번호에만 쓴다. 로그인은 길이를 검사하지 않으므로 이전 정책(15~64자)으로 만든 비밀번호도 그대로 쓸 수 있다.
  * 유출 비밀번호 검사는 서비스 계층에서 {@link BreachedPasswordChecker}로 한다(MB-D010).
  *
  * <p>문맥 단어 판정: 비밀번호를 소문자로 바꾸고 글자·숫자만 남긴 뒤 끝의 숫자를 뗀 "핵심어"가 username이나 서비스 이름의
@@ -17,8 +18,8 @@ import java.util.Set;
  */
 public class PasswordPolicy {
 
-    static final int MIN_LENGTH = 15;
-    static final int MAX_LENGTH = 64;
+    static final int MIN_LENGTH = 10;
+    static final int MAX_LENGTH = 30;
     private static final Set<String> SERVICE_WORDS = Set.of("yhslivestreaming", "yhslive", "livestreaming", "yhs");
 
     /** 위반 목록을 돌려준다. 비어 있으면 통과다. 길이를 어기면 다른 검사는 하지 않는다. */

@@ -188,7 +188,7 @@ class SignupApiIntegrationTest {
 
     @Test
     void passwordPolicyViolationsReturnBadRequestWithoutEchoingPassword(CapturedOutput output) throws Exception { // MB-T006
-        String shortPassword = "short pass 14!";
+        String shortPassword = "short p9!"; // 9자(MB-D026 하한 미만)
         String serviceName = "yhslivestreaming2026";
         String sameAsUsername = "long_username_123";
 
@@ -205,6 +205,29 @@ class SignupApiIntegrationTest {
 
         assertThat(output.getAll()).doesNotContain(shortPassword, serviceName, PASSWORD);
         assertThat(memberCount()).isZero();
+    }
+
+    @Test
+    void passwordMustBeTenToThirtyCodePoints() throws Exception { // MB-T006, MB-D026: code point 10~30자
+        String ten = "abcde fghi";
+        String thirty = "correct horse battery staple!!";
+        String thirtyOne = "correct horse battery staple!!!";
+        assertThat(ten.length()).isEqualTo(10);
+        assertThat(thirty.length()).isEqualTo(30);
+        assertThat(thirtyOne.length()).isEqualTo(31);
+
+        mockMvc.perform(signup("tester01", ten, ten, "ten@example.com", "테스터"))
+                .andExpect(status().isCreated());
+        mockMvc.perform(signup("tester02", thirty, thirty, "thirty@example.com", "테스터"))
+                .andExpect(status().isCreated());
+        mockMvc.perform(signup("tester03", thirtyOne, thirtyOne, "long@example.com", "테스터"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[?(@.field == 'password')].message").value("비밀번호는 30자 이하여야 합니다."));
+        mockMvc.perform(signup("tester04", "abcd fghi", "abcd fghi", "short@example.com", "테스터"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[?(@.field == 'password')].message").value("비밀번호는 10자 이상이어야 합니다."));
+
+        assertThat(memberCount()).isEqualTo(2);
     }
 
     @Test

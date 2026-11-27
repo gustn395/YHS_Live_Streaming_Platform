@@ -13,6 +13,7 @@ import com.yhs.livestreaming.global.auth.AuthCookieNames;
 import com.yhs.livestreaming.member.app.MemberErrorCode;
 import com.yhs.livestreaming.member.in.MemberAuthCookies;
 import com.yhs.livestreaming.member.app.password.MemberPasswordProperties;
+import com.yhs.livestreaming.member.app.password.PasswordHasher;
 import com.yhs.livestreaming.member.app.password.Pbkdf2PasswordHasher;
 import jakarta.servlet.http.Cookie;
 import java.nio.charset.StandardCharsets;
@@ -68,6 +69,9 @@ class LoginApiIntegrationTest {
 
     @Autowired
     private CapturingOtpMailSender mail;
+
+    @Autowired
+    private PasswordHasher passwordHasher;
 
     /** 실제 초기 발급 API로 받은 CSRF 토큰(G-D014). spring-security-test의 csrf()는 공유 컨텍스트의 저장소를 바꿔 쓰지 않는다. */
     private String csrfToken;
@@ -353,16 +357,43 @@ class LoginApiIntegrationTest {
     }
 
     @Test
-    void signupIsLimitedPerIpAndForwardedHeadersAreIgnored() throws Exception { // MB-T028
-        for (int i = 1; i <= 5; i++) {
-            mockMvc.perform(signupRequest("user000" + i, "user" + i + "@example.com"))
+    void signupIsLimitedPerIpAndForwardedHeadersAreIgnored() throws Exception { // MB-T028, MB-D027: IP당 10분 20회
+        for (int i = 1; i <= 20; i++) {
+            mockMvc.perform(signupRequest("user%04d".formatted(i), "user" + i + "@example.com"))
                     .andExpect(status().isCreated());
         }
 
-        mockMvc.perform(signupRequest("user0006", "user6@example.com").header("X-Forwarded-For", "198.51.100.1"))
+        String retryAfter = mockMvc.perform(signupRequest("user0021", "user21@example.com")
+                        .header("X-Forwarded-For", "198.51.100.1"))
                 .andExpect(status().isTooManyRequests())
-                .andExpect(header().exists("Retry-After"))
-                .andExpect(jsonPath("$.code").value("COMMON_TOO_MANY_REQUESTS"));
+                .andExpect(jsonPath("$.code").value("COMMON_TOO_MANY_REQUESTS"))
+                .andReturn().getResponse().getHeader("Retry-After");
+        assertThat(retryAfter).isNotNull();
+        assertThat(Long.parseLong(retryAfter)).isBetween(1L, 600L);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM members", Long.class)).isEqualTo(20L);
+    }
+
+    @Test
+    void existingMembersWithPasswordsLongerThanTheNewMaximumCanStillLogIn() throws Exception { // MB-T054, MB-D026
+        // 15~64자 정책 때 가입한 회원(31~64자 비밀번호)은 로그인·OTP에 길이 정책을 적용받지 않는다
+        String forty = "long legacy passphrase " + "x".repeat(17);
+        String sixtyFour = "long legacy passphrase " + "y".repeat(41);
+        assertThat(forty.codePointCount(0, forty.length())).isEqualTo(40);
+        assertThat(sixtyFour.codePointCount(0, sixtyFour.length())).isEqualTo(64);
+
+        String[][] cases = {{"legacy01", "legacy01@example.com", forty}, {"legacy02", "legacy02@example.com", sixtyFour}};
+        for (String[] c : cases) {
+            long memberId = signup(c[0], c[1]);
+            jdbc.update("UPDATE members SET password_hash = ? WHERE id = ?", passwordHasher.hash(c[2]), memberId);
+
+            Cookie challenge = challengeCookie(login(c[0], c[2]).andExpect(status().isOk()).andReturn());
+            MockHttpServletResponse response = mockMvc.perform(verify(challenge, mail.lastCodeFor(c[1])))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.memberId").value(memberId))
+                    .andReturn().getResponse();
+            assertThat(response.getCookie(AuthCookieNames.ACCESS_TOKEN)).isNotNull();
+            assertThat(response.getCookie(MemberAuthCookies.REFRESH_TOKEN)).isNotNull();
+        }
     }
 
     @Test

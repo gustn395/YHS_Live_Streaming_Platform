@@ -8,7 +8,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 
-/** 제한 설정 바인딩(MB-D017, MB-D018): 일부 값만 설정해도 나머지는 정책 기본값으로 채운다. */
+/** 제한 설정 바인딩(MB-D017, MB-D018, MB-D027): 일부 값만 설정해도 나머지는 정책 기본값으로 채운다. */
 class MemberLimitPropertiesTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
@@ -18,7 +18,7 @@ class MemberLimitPropertiesTest {
     void noSettingsMeansPolicyDefaults() {
         runner.run(context -> {
             MemberLimitProperties limits = context.getBean(MemberLimitProperties.class);
-            assertThat(limits.signup()).isEqualTo(new MemberLimitProperties.Window(5, Duration.ofHours(1)));
+            assertThat(limits.signup()).isEqualTo(new MemberLimitProperties.Window(20, Duration.ofMinutes(10))); // MB-D027
             assertThat(limits.login()).isEqualTo(new MemberLimitProperties.Window(30, Duration.ofMinutes(10)));
             assertThat(limits.otp()).isEqualTo(new MemberLimitProperties.Window(30, Duration.ofMinutes(10)));
         });
@@ -30,7 +30,7 @@ class MemberLimitPropertiesTest {
                         "member.limits.otp.max=40")
                 .run(context -> {
                     MemberLimitProperties limits = context.getBean(MemberLimitProperties.class);
-                    assertThat(limits.signup()).isEqualTo(new MemberLimitProperties.Window(10, Duration.ofHours(1)));
+                    assertThat(limits.signup()).isEqualTo(new MemberLimitProperties.Window(10, Duration.ofMinutes(10)));
                     assertThat(limits.login()).isEqualTo(new MemberLimitProperties.Window(50, Duration.ofMinutes(10)));
                     assertThat(limits.otp()).isEqualTo(new MemberLimitProperties.Window(40, Duration.ofMinutes(10)));
                 });
@@ -48,7 +48,7 @@ class MemberLimitPropertiesTest {
         runner.withPropertyValues("member.limits.signup.window=30m", "member.limits.otp.window=5m")
                 .run(context -> {
                     MemberLimitProperties limits = context.getBean(MemberLimitProperties.class);
-                    assertThat(limits.signup()).isEqualTo(new MemberLimitProperties.Window(5, Duration.ofMinutes(30)));
+                    assertThat(limits.signup()).isEqualTo(new MemberLimitProperties.Window(20, Duration.ofMinutes(30)));
                     assertThat(limits.otp()).isEqualTo(new MemberLimitProperties.Window(30, Duration.ofMinutes(5)));
                 });
     }

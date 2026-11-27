@@ -4,7 +4,7 @@ import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * 요청·로그인·OTP·Refresh 제한 수치(MB-D015, MB-D017, MB-D018, MB-D020). 기본값이 정책 값이고 설정({@code member.limits.*})으로 바꿀 수 있다.
+ * 요청·로그인·OTP·Refresh 제한 수치(MB-D015, MB-D017, MB-D018, MB-D020, MB-D027). 기본값이 정책 값이고 설정({@code member.limits.*})으로 바꿀 수 있다.
  * 비밀 값이 아니므로 기본값을 둔다.
  */
 @ConfigurationProperties("member.limits")
@@ -13,7 +13,7 @@ public record MemberLimitProperties(Window signup, Window login, Window otp, Win
 
     public MemberLimitProperties {
         // 범위별 설정 객체가 없으면 기본값, 있으면 비운 max·기간만 그 범위의 기본값으로 채운다(설정한 값은 유지)
-        signup = withDefaults(signup, new Window(5, Duration.ofHours(1)));
+        signup = withDefaults(signup, new Window(20, Duration.ofMinutes(10))); // MB-D027
         login = withDefaults(login, new Window(30, Duration.ofMinutes(10)));
         otp = withDefaults(otp, new Window(30, Duration.ofMinutes(10)));
         refresh = withDefaults(refresh, new Window(120, Duration.ofMinutes(10))); // MB-D020

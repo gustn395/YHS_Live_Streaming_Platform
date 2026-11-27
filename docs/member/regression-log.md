@@ -80,5 +80,12 @@
 | 2026-11-27 | 같은 명령 + `:app:test --tests "*GoogleOAuthLoginIntegrationTest"` (#21 S6 재리뷰 반영 GREEN) | 성공(exit 0) | |
 | 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (#21 S6 재리뷰 반영 뒤 S5) | 성공(exit 0). global 54, member 262, app 128 통과 | |
 | 2026-11-27 | `.\gradlew.bat :modules:global:test --rerun :modules:member:test --rerun :app:test --rerun --continue` (#21 Phase 5 S10 뒤 최종 S5) + `:app:build` | 성공(exit 0). global 54, member 262, app 128 통과, build exit 0 | S10 0건, 코드 변경 없음 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --tests "*PasswordPolicyTest" --tests "*MemberLimitPropertiesTest" --tests "*RedisRequestRateLimiterTest" :app:test --tests "*SignupApiIntegrationTest" --tests "*LoginApiIntegrationTest" --continue` (#24 테스트 작성 후, 구현 전 RED) | 실패(의도). member 28건 중 12 실패(길이 10·30, 가입 20/10분), app 34건 중 3 실패 | 의도하지 않은 실패 1건: `secretsNeverAppearInLogsOrBodies` — 앞서 실패한 가입 제한 테스트의 MockMvc 실패 출력(요청 본문의 테스트 비밀번호)이 클래스 단위 출력 캡처에 남음(S4, 제품 결함 아님) |
+| 2026-11-27 | `.\gradlew.bat :app:test --tests "*LoginApiIntegrationTest.secretsNeverAppearInLogsOrBodies"` (S4 단독 실행) | 성공(exit 0) | 단독으로는 통과 → 연쇄 실패 확인 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test :app:test --continue` (#24 구현 후 GREEN) | 성공(exit 0). member 264, app 130 통과 | `secretsNeverAppearInLogsOrBodies` 함께 통과(S4 가설 확인). MB-T054(40·64자 이전 비밀번호 회원 로그인·OTP) 포함 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#24 S5) | 성공(exit 0). member 264, app 130 통과 | global은 변경 없어 실행 안 함 |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#24 S6 반영 뒤 S5: PROGRESS 안건 축약, Swagger 429 문구, 테스트 이름) | 성공(exit 0). member 264, app 130 통과 | |
+| 2026-11-27 | `.\gradlew.bat :app:build` (#24 Commit 직전) | 성공(exit 0). WAR 2개(실행 가능·plain), `:app:test` UP-TO-DATE(직전 --rerun 통과) | S7 미실행(사용자 지시) |
+| 2026-11-27 | `.\gradlew.bat :modules:member:test --rerun :app:test --rerun --continue` (#24 S10 뒤 최종 S5) | 성공(exit 0). member 264, app 130 통과 | S10 0건, 코드 변경 없음 |
 
 - 미실행: 로컬 전체 `./gradlew clean build`(빌드 정책상 실행하지 않음).

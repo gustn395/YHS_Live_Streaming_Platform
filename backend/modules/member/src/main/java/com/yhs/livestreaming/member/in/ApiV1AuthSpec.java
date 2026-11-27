@@ -36,7 +36,7 @@ public interface ApiV1AuthSpec {
 
     @Operation(summary = "일반 회원가입",
             description = "username·비밀번호·이메일·닉네임으로 가입한다. 가입 직후 계정은 PENDING·이메일 미확인이며 "
-                    + "로그인 토큰을 발급하지 않는다. 비밀번호는 15~64자이고 아이디·서비스 이름을 바탕으로 한 비밀번호와 "
+                    + "로그인 토큰을 발급하지 않는다. 비밀번호는 10~30자(NFC 정규화 뒤 code point 기준)이고 아이디·서비스 이름을 바탕으로 한 비밀번호와 "
                     + "유출된 적이 있는 비밀번호(HIBP 확인)는 거부한다. 유출 여부를 확인할 수 없으면 가입하지 않는다(503).",
             security = @SecurityRequirement(name = CSRF_SCHEME))
     @ApiResponses({
@@ -51,7 +51,7 @@ public interface ApiV1AuthSpec {
             @ApiResponse(responseCode = "409",
                     description = "중복. code=MEMBER_USERNAME_DUPLICATE 또는 MEMBER_EMAIL_DUPLICATE",
                     content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(ref = PROBLEM_DETAIL_REF))),
-            @ApiResponse(responseCode = "429", description = "IP당 가입 요청 초과. code=COMMON_TOO_MANY_REQUESTS",
+            @ApiResponse(responseCode = "429", description = "IP당 가입 요청 초과(기본 10분 20회, 설정값). code=COMMON_TOO_MANY_REQUESTS",
                     headers = @Header(name = "Retry-After", description = "다시 시도할 수 있을 때까지 초"),
                     content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(ref = PROBLEM_DETAIL_REF))),
             @ApiResponse(responseCode = "503",

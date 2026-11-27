@@ -19,7 +19,7 @@
 
 - 인증은 JWT Access Token + 불투명 Refresh Token이다([MB-D002](member/decisions.md#1-확정-결정)).
 - 일반 가입 직후 계정은 PENDING·이메일 미확인이고, 첫 로그인 OTP로 ACTIVE가 된다. PENDING은 24시간 뒤 정리 대상이다([MB-D003](member/decisions.md#1-확정-결정)).
-- 비밀번호는 NFC 기준 15~64자, 구성 규칙 없음, username·서비스 이름 파생어 거부([MB-D004](member/decisions.md#1-확정-결정), [MB-D005](member/decisions.md#1-확정-결정)).
+- 새로 설정하는 비밀번호는 NFC 기준 10~30자(프로젝트 자체 정책, 기존 비밀번호는 그대로 사용), 구성 규칙 없음, username·서비스 이름 파생어 거부([MB-D026](member/decisions.md#1-확정-결정), [MB-D004](member/decisions.md#1-확정-결정), [MB-D005](member/decisions.md#1-확정-결정)).
 - 유출 비밀번호는 HIBP range API(k-익명성)로 검사해 거부하고, 검사할 수 없으면 가입을 거부한다(503)([MB-D010](member/decisions.md#1-확정-결정)).
 - 비밀번호는 PBKDF2-HMAC-SHA256 + pepper로 해시하고 원문을 저장·로깅하지 않는다([MB-D006](member/decisions.md#1-확정-결정)).
 - 비밀 키는 용도별로 분리하고 기본값 없는 환경변수로만 받으며, 잘못되면 기동에 실패한다([MB-D007](member/decisions.md#1-확정-결정)).
