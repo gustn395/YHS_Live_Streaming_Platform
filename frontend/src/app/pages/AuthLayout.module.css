@@ -1,0 +1,61 @@
+/* 가입·완료 화면 배치(FE-D028): 모바일은 폭 전체 단일 열, 640px 이상은 가운데 카드(최대 440px). */
+.page {
+  min-height: 100vh;
+  padding: var(--space-6) var(--space-4);
+}
+
+.brand {
+  margin: 0 0 var(--space-4);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.card {
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.title {
+  margin: 0 0 var(--space-6);
+  font-size: 1.5rem;
+}
+
+.footer {
+  margin: var(--space-6) 0 0;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.primaryLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: var(--space-6);
+  border-radius: var(--radius);
+  background: var(--color-brand);
+  color: var(--color-on-brand);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.primaryLink:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+@media (min-width: 640px) {
+  .page {
+    padding-top: var(--space-8);
+  }
+
+  .card {
+    padding: var(--space-8);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+  }
+}

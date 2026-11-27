@@ -70,6 +70,7 @@ describe('비동기 parse', () => {
 // FE-T002: 오류 응답 정규화(G-D003, FE-D007)
 describe('HTTP 오류 정규화', () => {
   it('ProblemDetail의 code·title·detail·errors[]를 꺼낸다', async () => {
+    document.cookie = 'XSRF-TOKEN=t; path=/'; // POST는 CSRF 토큰이 있어야 보낸다(FE-D020)
     server.use(
       http.post('*/api/v1/members', () =>
         HttpResponse.json(

@@ -35,8 +35,9 @@ frontend(React SPA) 전용 규칙만 둔다. 공통 규칙은 [루트 AGENTS.md]
 - `VITE_`로 시작하는 환경변수는 번들에 들어간다. 비밀 값과 서버 측 설정을 넣지 않는다([FE-D002](../docs/frontend/decisions.md#1-확정-결정)).
 - 의존성은 정확한 버전과 lockfile로 관리하고 재현 설치는 `npm ci`로 한다. `npm audit fix`, `--force`, `--legacy-peer-deps`는 승인
   없이 쓰지 않는다([FE-D008](../docs/frontend/decisions.md#1-확정-결정)).
+- 상태 변경 요청의 CSRF 헤더는 공통 API Client가 붙인다. 화면 코드는 `XSRF-TOKEN` 쿠키를 직접 읽지 않는다
+  ([FE-D020](../docs/frontend/decisions.md#1-확정-결정)).
 
 ## 6. 미정 규칙 상태
 
 - Backend 인증 계약 연동 규칙 — [FE-U02](../docs/frontend/decisions.md#2-미결) 확정 뒤 정한다.
-- XSRF 활성화 규칙 — [FE-U04](../docs/frontend/decisions.md#2-미결)([G-U02](../docs/policy.md#4-공통-미결)) 확정 뒤 정한다.

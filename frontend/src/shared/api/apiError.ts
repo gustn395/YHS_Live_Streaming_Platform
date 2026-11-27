@@ -12,12 +12,17 @@ export interface ProblemInfo {
 }
 
 export type ApiFailure =
-  /** 서버가 오류 status로 응답했다. ProblemDetail이 아니면 problem은 null이다. */
-  | { kind: 'http'; status: number; problem: ProblemInfo | null }
+  /**
+   * 서버가 오류 status로 응답했다. ProblemDetail이 아니면 problem은 null이다.
+   * retryAfterSeconds는 Retry-After가 1 이상의 안전한 정수 초일 때만 있다(FE-D031).
+   */
+  | { kind: 'http'; status: number; problem: ProblemInfo | null; retryAfterSeconds?: number }
   /** 2xx인데 본문 형식이 기대와 다르다. */
   | { kind: 'invalid-response'; status: number }
   | { kind: 'network' }
   | { kind: 'timeout' }
+  /** CSRF 발급 API는 성공했는데 쿠키를 읽을 수 없다(예: 쿠키 차단). 원래 요청은 보내지 않았다(FE-D031). */
+  | { kind: 'csrf-unavailable' }
   /** 호출자·인증 전환·Deadline으로 취소했거나, 오래된 인증 세대의 응답이라 버렸다. 화면 오류로 표시하지 않는다. */
   | { kind: 'canceled' };
 

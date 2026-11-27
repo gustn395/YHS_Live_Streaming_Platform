@@ -19,6 +19,8 @@ describe('classifyInitFailure', () => {
     ['timeout', api({ kind: 'timeout' }), { type: 'failed', error: { kind: 'timeout' } }],
     ['2xx 형식 오류', api({ kind: 'invalid-response', status: 200 }), { type: 'failed', error: { kind: 'invalid-response', status: 200 } }],
     ['ApiError가 아닌 예외', new TypeError('bug'), { type: 'failed', error: { kind: 'unexpected' } }],
+    // 초기화는 GET이라 생기지 않지만 생기더라도 미인증으로 보지 않는다(FE-D009, FE-D031)
+    ['csrf-unavailable', api({ kind: 'csrf-unavailable' }), { type: 'failed', error: { kind: 'unexpected' } }],
     ['취소', api({ kind: 'canceled' }), { type: 'ignore' }],
   ])('%s', (_name, error, expected) => {
     expect(classifyInitFailure(error)).toEqual(expected);

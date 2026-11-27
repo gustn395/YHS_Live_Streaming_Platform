@@ -202,3 +202,80 @@ frontend 코드·의존성 변경 없음. Frontend CI가 실행할 명령(FE-T00
 
 - L3-1 실행의 audit 상세 Summary와 L3-2 원복 실행의 캐시 복원 로그는 미확인이다(같은 기능은 L3-3 실행에서 확인).
 - React Router `HydrateFallback` 경고와 Vitest 환경 생성 비용 안내는 L3-4b 실패와 무관하며 FE-02에서 고치지 않았다.
+
+### 2026-11-27 FE-03(Issue #20) 회원가입 화면·CSRF 연동 — 브랜치 `feature/20-frontend-signup`, 기준 커밋 d47736c + 작업 트리(커밋 전)
+
+환경: Windows 10, Node v24.19.0, npm 11.17.0. Worktree `YHS_Live_Streaming_Platform-fe03`. 새 의존성 없음(lockfile 변경 없음).
+
+| 명령 | 결과 |
+| --- | --- |
+| `npm ci` | exit 0(lockfile 그대로) |
+| `npm audit --omit=dev --audit-level=high` | exit 0(운영 의존성 high 이상 0건) |
+| `npm audit --json` | moderate 9건, high·critical 0건(FE-D015 위험 수용 대상 lint 체인). `npm audit fix` 미실행 |
+| TDD RED(구현 전) | `apiClient.csrf.test.ts` 14건·`errorPresentation.test.ts` 2건·`classifyInitFailure.test.ts` 1건·`signupValidation.test.ts` 50건·`signupApi.test.ts` 10건·`SignupForm.test.tsx` 23건·`SignupPage.test.tsx` 8건이 기능이 없어 실패함을 확인 |
+| `npx vitest run` | exit 0, 22파일 338건 통과(shared/api 113, features/auth 87, features/signup 83, app 16, src/test 25, scripts 14) |
+| `npm run typecheck` · `npm run lint` | 모두 exit 0 |
+| `npm run build` | exit 0, `check-dist: 가안 표지 없음`(JS 393.01 kB, CSS 3.56 kB) |
+
+- 의도된 기존 테스트 변경 1건: `apiClient.test.ts`의 "ProblemDetail의 code·title·detail·errors[]를 꺼낸다"는 POST를 보내므로 준비 단계에 CSRF 쿠키를
+  넣었다(이제 POST는 토큰이 없으면 `/csrf`를 먼저 호출한다, FE-D020). 검증 내용은 바꾸지 않았다.
+- 미실행: M-02(실제 Backend 수동 확인, 별도 승인 대기), M-01(FE-01부터 미실행), Safari 확인, FE-T018 GitHub Actions(PR 이후),
+  Backend `:app:build`(Backend 변경 없음).
+
+**S6 리뷰 반영 뒤 재검증 (2026-11-27, 같은 작업 트리)**
+
+| 명령·확인 | 결과 |
+| --- | --- |
+| TDD RED(수정 전) | `csrfToken.test.ts` 3건·`apiClient.csrf.test.ts` 1건·`signupValidation.test.ts` 2건·`SignupForm.test.tsx` 8건이 기대한 이유로 실패 |
+| 뮤테이션 확인(처음부터 통과한 회귀 테스트) | 제출 가드(`submittingRef`)·대기 시각 가드·언마운트 타이머 정리·언마운트 요청 취소를 하나씩 지우면 각 테스트가 실패함을 확인한 뒤 되돌림. 대기 시각 가드 테스트는 처음에 즉시 단언해 가드를 못 잡아서 200ms 대기 뒤 단언하도록 고침 |
+| Backend 이메일 판정 확인 | 로컬 Gradle 캐시의 Hibernate Validator 9.1.6·9.1.3 `EmailValidator`를 저장소 밖 임시 Java 파일로 실행. `"a b"@example.com`·`"a@b"@example.com` VALID, `a@@b.com`·`a b@c.com`·`a@b c.com` INVALID(두 버전 같음). 클라이언트 규칙을 이 결과에 맞춤 |
+| `npx vitest run` | exit 0, 23파일 366건 통과(shared/api 121, features/auth 87, features/signup 103, app 16, src/test 25, scripts 14) |
+| `npm run lint` | 첫 실행 exit 1(react-hooks purity: 컴포넌트 안 `Date.now()` 2곳) → 시간 계산을 컴포넌트 밖 함수로 옮긴 뒤 exit 0 |
+| `npm run typecheck` · `npm run build` | 모두 exit 0, `check-dist: 가안 표지 없음` |
+
+**S6 재리뷰(R1~R5)·후속 확인 반영 뒤 최종 재검증 (2026-11-27, 같은 작업 트리)**
+
+| 명령·확인 | 결과 |
+| --- | --- |
+| TDD RED(수정 전) | `signupValidation.test.ts` 이메일 4건(점으로 이은 따옴표 조각)·1건(따옴표 안 `\"`), `SignupForm.test.tsx` 2건(모두 낡은 결과 안내 R3, blur 요약 재알림 R2)이 기대한 이유로 실패 |
+| RED 미재현(회귀 감시로 둠) | R1·후속(렌더 사이 없는 연속 입력의 값·서버 오류 덮어쓰기), 재제출 뒤 요약 키 미리셋: React가 discrete 이벤트마다 반영하고 입력 change가 먼저 키를 끄므로 DOM 이벤트로 재현되지 않음. 코드는 ref·`updateErrors` 단일 경로로 바꿈 |
+| 뮤테이션 확인 | 언마운트 타이머 정리를 지우면 `clearTimeout` spy 테스트가 실패함을 확인 후 되돌림 |
+| Backend 이메일 판정 추가 확인 | Hibernate Validator 9.1.6 실행: `"a b".c@x.com`·`c."a b"@x.com`·`"a\"b"@x.com`·`"a\\b"@x.com` VALID, `"a""b"@x.com`·`a"b c"@x.com`·`""@x.com`·`"a\ b"@x.com`·`a\b@x.com`·`a..b@x.com`·`"a"b@x.com` INVALID |
+| 간헐 실패 | 중간 실행 1회에 기존 FE-01 테스트 `AuthProvider.test.tsx:271`("오류 상태에서 retry를 연달아 두 번 불러도…")이 `expected 'initializing' to be 'authenticated'`로 실패. 같은 파일 단독 6회·전체 이후 6회는 모두 통과. FE-03은 AuthProvider를 바꾸지 않았다. 부하 시 타이밍 문제로 보고 범위 밖 후속 후보로 남김(PASS로 숨기지 않음) |
+| `npx vitest run` | 최종 3회 연속 exit 0, 23파일 379건 통과(shared/api 121, features/auth 87, features/signup 116, app 16, src/test 25, scripts 14) |
+| `npm run lint` · `npm run typecheck` · `npm run build` | 모두 exit 0, `check-dist: 가안 표지 없음` |
+| 보이지 않는 문자 검사(`src`) | 0건 |
+
+**M-02 실제 Backend 수동 확인 (2026-11-27, 수동 — 자동 결과와 구분)**
+
+환경: Chrome 151.0.7922.138(공식 빌드, 64비트), Windows. Frontend `npm run dev`(localhost:5173, 프록시 대상 18080) — fe03 작업 트리(커밋 전).
+Backend: fe03 Worktree의 `backend/`(기준 커밋 `d47736c`), `:app:bootRun --no-daemon`(Java 17 toolchain), 포트 18080. 컨테이너
+`postgres:17-alpine`·`redis:7.4-alpine`·`axllent/mailpit:v1.21.0`(`--rm`, 루프백 전용 포트, 비밀번호 없는 구성). 비밀 키 3종은 실행 명령 안에서
+`openssl rand`로 만든 임시 값이고 어디에도 기록하지 않았다. 보안 설정·Rate Limit·HIBP는 바꾸지 않았다(HIBP 실제 호출).
+Backend 기준을 `origin/main`(`cea2deb`, BE-04 #19 포함)이 아닌 `d47736c`로 둔 근거(사용자 결정 Q1=a): BE-04의 Backend 변경은 refresh·logout API와
+`NullAuthenticatedSessionStrategy`(인증된 요청의 XSRF 쿠키 삭제 결함 수정)이고, 회원가입 API·`/csrf` 발급·익명 요청의 CSRF 검증은 바꾸지 않았다
+(`git diff d47736c origin/main`의 `GlobalSecurityConfig`·`ApiV1AuthController` 확인). 최신 main 위에서 실행한 것은 아니다.
+
+기동 확인(Claude 실행): health `UP`, Flyway `v20261126.1` 적용, 프록시 경유 `GET /api/v1/auth/csrf` 204 + `Set-Cookie: XSRF-TOKEN=…; Path=/; Secure; SameSite=Strict`, `Cache-Control: no-store`.
+
+| M-02 항목 | 결과(사용자 Chrome 확인) |
+| --- | --- |
+| 1 가입 201, CSRF 쿠키와 요청 헤더, 완료 화면 | PASS |
+| 2 완료 화면 새로고침·뒤로 가기·직접 접근 | PASS |
+| 3 `GET /csrf`에 `X-XSRF-TOKEN` 없음(M-01 범위와 같음) | PASS |
+| 4 중복 아이디 409: 필드 오류·요약·포커스 | PASS |
+| 5 유출 비밀번호 안내 | PASS |
+| 6 CSRF 403: 보안 확인 만료 안내·입력 유지·자동 재전송 없음 | PASS(유도 방법 아래) |
+| 7 재제출 → `GET /csrf` 204 → `POST /signup` 201 → 완료 화면 | PASS |
+| 8 잘못된 이메일의 실제 Backend 400 필드 표시 | 미실행(사용자 생략). 같은 동작은 자동 테스트 FE-T026으로만 검증 |
+| 9 폭 320px 가로 스크롤 없음(`scrollWidth <= clientWidth` = true)·다크 모드·대비 | PASS. 구체적인 대비 수치는 기록하지 않음 |
+| 추가: 429 대기 안내 | "요청이 많습니다. 약 58분 뒤 다시 시도해 주세요." 표시를 사용자가 확인. 그때 버튼 비활성 여부는 미확인 |
+
+- 429 경위: 가입 IP 카운터가 7(허용 5 + 거부 2로 추정, 모든 요청이 프록시를 거쳐 `127.0.0.1` 하나로 집계)이 되어 한도(시간당 5회, MB-D018)에 걸렸다.
+  사용자 결정으로 M-02 전용 Redis의 `ratelimit:signup:*` 키 1개만 지워 시험 데이터를 1회 초기화했다(한도·설정은 그대로).
+- CSRF 403 유도: 처음 안내한 "DevTools Override headers"는 요청 헤더를 바꾸지 못해 쓸 수 없었다(안내 오류). Console에서 `path=/signup`인 가짜
+  `XSRF-TOKEN` 쿠키를 더해 가입 화면 JS가 가짜 값을 헤더에 싣게 하고(서버에는 `Path=/` 진짜 쿠키만 전달) 403을 유도했다. 복구는 그 쿠키를 지운 뒤
+  다시 제출했다. 가짜 쿠키를 지우지 않으면 `/csrf` 재확보 뒤에도 403이 반복된다(같은 이름 쿠키가 여러 Path에 있는 경우, S6 1차 리뷰 보류 항목과 같음).
+- 미확인: Safari, CSRF 토큰 값이 갱신됐는지(Backend는 쿠키가 있으면 같은 값을 쓴다), 429 때 버튼 비활성 상태.
+- 정리: Frontend·Backend 프로세스 종료(TaskStop 뒤 남은 Java PID 24848·Vite PID 16312를 명령줄로 확인하고 종료), 컨테이너 3개 정지(`--rm`로 삭제),
+  포트 18080·5173·15432·16379·11025·18025 해제 확인. 다른 컨테이너는 건드리지 않았다.

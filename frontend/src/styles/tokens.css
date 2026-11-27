@@ -1,0 +1,57 @@
+/* 공통 CSS 토큰(FE-D027, FE-D031). 값의 원본 표는 docs/frontend/module.md 1장이다. */
+:root {
+  color-scheme: light dark;
+  --color-brand: #6d28d9;
+  --color-on-brand: #ffffff;
+  --color-bg: #f7f7fa;
+  --color-surface: #ffffff;
+  --color-text: #1a1a22;
+  --color-text-muted: #55556a;
+  --color-border: #d4d4de;
+  --color-danger: #b42318;
+  --color-danger-bg: #fef3f2;
+  --color-warning-bg: #fffaeb;
+  --color-focus: #6d28d9;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius: 8px;
+  --font-sans: system-ui, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-brand: #a78bfa;
+    --color-on-brand: #1a1033;
+    --color-bg: #0f0f14;
+    --color-surface: #1a1a22;
+    --color-text: #ededf2;
+    --color-text-muted: #a9a9bc;
+    --color-border: #3a3a48;
+    --color-danger: #f97066;
+    --color-danger-bg: #2a1414;
+    --color-warning-bg: #2a2410;
+    --color-focus: #c4b5fd;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+}
+
+a {
+  color: var(--color-brand);
+}

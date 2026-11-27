@@ -4,6 +4,7 @@ import { apiClient } from './app/apiClient';
 import { AppProviders } from './app/AppProviders';
 import { createAppRouter } from './app/router';
 import { unavailableAuthAdapter } from './features/auth/unavailableAuthAdapter';
+import './styles/tokens.css';
 
 const rootElement = document.getElementById('root');
 if (rootElement === null) throw new Error('#root 요소가 없다');

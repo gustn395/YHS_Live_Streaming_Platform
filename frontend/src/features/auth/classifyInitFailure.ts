@@ -19,6 +19,8 @@ export function classifyInitFailure(error: unknown): InitFailureOutcome {
       return { type: 'failed', error: { kind: failure.kind } };
     case 'invalid-response':
       return { type: 'failed', error: { kind: 'invalid-response', status: failure.status } };
+    case 'csrf-unavailable':
+      return { type: 'failed', error: { kind: 'unexpected' } };
     case 'http': {
       const code = failure.problem?.code;
       if (isUnauthenticated(failure)) return { type: 'unauthenticated' };
