@@ -2,6 +2,8 @@ package com.yhs.livestreaming.member.app;
 
 import com.yhs.livestreaming.member.domain.Member;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -33,4 +35,14 @@ public interface MemberRepository {
      * @return 바뀐 행 수(0이면 상태를 다시 확인해야 한다)
      */
     int activatePending(long id, Instant createdAfter, Instant now);
+
+    /** 여러 회원을 한 번에 조회한다(MB-D029). 없는 ID는 결과에서 빠진다. */
+    List<Member> findAllByIds(Collection<Long> ids);
+
+    /**
+     * 닉네임 수정(MB-D028): ACTIVE 회원일 때만 바꾼다(짧은 트랜잭션 하나).
+     *
+     * @return 바뀐 행 수(0이면 회원이 없거나 ACTIVE가 아니다)
+     */
+    int updateNicknameOfActive(long id, String nickname, Instant now);
 }

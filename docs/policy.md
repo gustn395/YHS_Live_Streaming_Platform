@@ -29,6 +29,7 @@
 - OTP 메일은 SMTP로 동기 발송하고 실패하면 503이다([MB-D016](member/decisions.md#1-확정-결정)).
 - 로그인 실패·회원 단위 OTP·IP 기준 요청 수를 제한하고(429), Redis를 쓸 수 없으면 인증 관련 요청을 503으로 거부한다([MB-D017](member/decisions.md#1-확정-결정)~[MB-D019](member/decisions.md#1-확정-결정)).
 - Google 로그인은 OIDC 인증을 1차 인증으로만 쓰고 LOCAL과 같이 이메일 OTP를 거친다. 처음 로그인하면 PENDING GOOGLE 회원으로 자동 가입하며 LOCAL 계정과 병합하지 않는다([MB-D023](member/decisions.md#1-확정-결정)~[MB-D025](member/decisions.md#1-확정-결정)).
+- 로그인한 회원은 자기 정보를 조회하고 닉네임만 바꿀 수 있다. 요청마다 계정 상태를 다시 확인해 정지·없는 회원의 세션을 폐기한다. 다른 모듈은 member의 공개 인터페이스로만 회원을 조회하고 이메일·username은 받지 않는다([MB-D028](member/decisions.md#1-확정-결정), [MB-D029](member/decisions.md#1-확정-결정)).
 
 ## 3. 공통 결정 이력
 
@@ -48,6 +49,7 @@
 | G-D012 | springdoc 버전은 3.1.1이다(G-D008의 3.2.1을 바꾼다. 나머지 G-D008 내용은 유지). springdoc은 같은 Spring Boot 마이너 버전으로 빌드된 릴리스를 쓰고, 빌드는 `org.springframework.boot` 모듈이 모두 Boot 버전과 같고 Spring Framework 모듈이 한 버전인지 검사한다. | springdoc 3.2.1은 Boot 4.2.0으로 빌드돼 `spring-boot-webmvc 4.2.0`·`spring-web 7.1.0`을 끌어오고, Gradle 충돌 해결로 Boot 4.1.3과 섞여 자동 설정이 깨졌다(관측 convention 빈 2개). 3.1.1은 Boot 4.1.0으로 빌드됐다(Maven Central POM 부모 버전). | Member 8차 Q1(Issue #8), 2026-11-26 |
 | G-D013 | Spring Boot 기본 계정(인메모리 사용자와 기동 시 생성 비밀번호)을 쓰지 않는다(`UserDetailsServiceAutoConfiguration` 제외). 인증은 global 보안 체인과 member 모듈이 맡는다. HTTP Basic·폼 로그인 같은 기본 인증 방식은 켜지 않는다. | 기본 계정은 쓰는 곳이 없는데 생성 비밀번호가 로그에 남고, 인증 경로가 하나 더 생긴다. | Member 9차 Q2(Issue #8 S6 리뷰), 2026-11-26 |
 | G-D014 | CSRF는 SPA 이중 제출 방식으로 막는다. Spring Security 7의 `csrf.spa()`는 쓰지 않고, [Spring Security 6.5 공식 문서](https://docs.spring.io/spring-security/reference/6.5/servlet/exploits/csrf.html)의 구성(`CookieCsrfTokenRepository.withHttpOnlyFalse()` + 문서 기반 `SpaCsrfTokenRequestHandler`, BREACH 대응)을 적용한다. 토큰은 `XSRF-TOKEN` 쿠키(HttpOnly 아님, Secure, SameSite=Strict, Path=/, Domain 미지정)와 `X-XSRF-TOKEN` 헤더로 주고받는다. 로그인·회원가입·OTP 등 공개 상태 변경 API도 보호한다. 인증 전 초기 토큰은 공개 `GET /api/v1/auth/csrf`(204, 본문 없음, `Cache-Control: no-store`)로 받고, 지연 로딩된 토큰을 실제로 로드해 쿠키를 발급한다. OTP 최종 인증에 성공하면 CSRF 토큰을 명시적으로 갱신해 새 쿠키를 준다(비밀번호 1차 인증은 최종 로그인과 구분). 자체 로그인 API에서 Spring Security 인증 성공 처리가 자동으로 실행된다고 가정하지 않는다. 로그아웃 관련 CSRF 처리는 BE-04에서 한다. Frontend 반영(FE-D014·FE-U04)은 Frontend 협의 안건이다. G-U02를 닫고, G-D005의 활성화 조건을 채운다. | 쿠키 인증을 도입하면 CSRF 보호가 필요하다(G-D005). SPA와 API가 같은 출처(FE-D002)이고 stateless 체인(G-D004)과 맞는다. 비즈니스 코드는 Boot 3.5 / Security 6.x 호환 API를 우선한다(루트 AGENTS.md). | BE-03 1라운드 Q3(구현 방식 수정)·2라운드 Q1·3라운드 Q4, Issue #13, 2026-11-26 |
+| G-D015 | 모듈 경계는 ArchUnit 테스트(app 모듈 테스트, 테스트 의존성만)로 자동 검사한다. 규칙: 다른 모듈은 member 중 `com.yhs.livestreaming.member.app.api` 패키지만 참조한다. global은 도메인 모듈을 참조하지 않는다(G-D001). 다른 도메인 모듈의 공개 패키지가 생기면 같은 테스트에 규칙을 더한다. 도입 버전은 [README 6장](../backend/README.md#6-의존성-도입-계획-q3)을 따른다. | [README 5장](../backend/README.md#5-모듈과-패키지-규칙)의 "다른 도메인은 `app` 공개 API로만" 규칙을 같은 Gradle 모듈 안의 Java 접근 제어만으로는 강제할 수 없다. 빌드 구조를 바꾸지 않고 CI에서 막는다. | BE-07 1라운드 Q7, Issue #27, 2026-11-27 |
 
 ## 4. 공통 미결
 

@@ -24,7 +24,8 @@
 | GL-T016 | JWT 키 기동 검증 | `auth.jwt.key` 누락·Base64 아님·256비트 아님, `key-id` 누락·형식 오류 → 기동 실패, 메시지·`toString`에 키 값 없음 | MB-D007, MB-D012 | `JwtPropertiesTest` |
 | GL-T017 | 429·CSRF 오류 응답 | `TooManyRequestsException` → 429 + `Retry-After`(초 올림, 최소 1), `COMMON_TOO_MANY_REQUESTS`. CSRF 예외 → 403 `AUTH_CSRF_INVALID` | G-D003, MB-D017, MB-D018 | `GlobalExceptionHandlerTest` |
 | GL-T018 | 인증된 요청이 CSRF 토큰을 지우지 않음 | 실제 Access 쿠키로 인증된 상태 변경 요청(POST)의 응답에 `XSRF-TOKEN` `Set-Cookie`가 없고, 같은 CSRF 토큰으로 다음 요청도 성공. 갱신은 `CsrfTokenRenewer` 호출 지점(로그인 최종 성공·로그아웃)에서만 | G-D014, MB-D020, MB-D022 | `AccessTokenCookieIntegrationTest`, member `RefreshLogoutApiIntegrationTest` |
+| GL-T019 | 모듈 경계(ArchUnit) | 운영 코드(테스트 제외) 전체에서 member 밖의 코드는 member 중 `member.app.api`만 참조, global은 도메인 모듈(member·broadcast·streaming·chat·comment·donation·recording)을 참조하지 않음. 규칙이 실제 위반(테스트 전용 `ForbiddenMemberConsumer`가 `member.domain.Member` 참조)을 잡고 공개 인터페이스만 쓰는 대상(`AllowedMemberConsumer`)은 통과시킴. `member.app.api`는 프로젝트 안에서 자기 패키지만 참조(내부 타입 노출 금지, 위반 대상 `LeakyPublicContract`는 잡고 실제 공개 타입은 통과). global 규칙도 위반 대상(`ForbiddenGlobalDependency`가 member 공개 인터페이스 참조)을 잡음. 운영 클래스를 실제로 읽었는지(member·global 클래스 포함, 테스트 대상 제외) 확인 | G-D015, G-D001 | `ModuleBoundaryTest` |
 
 ## 2. 집계
 
-- 요구사항 18건(GL-T001~GL-T018). JUnit 테스트 87건(global 54, app 33: `SecurityChainIntegrationTest` 11, `CsrfIntegrationTest` 9, `AccessTokenCookieIntegrationTest` 6, `LiveStreamingApplicationTests` 3, OpenAPI 4). GL-T015는 `AuthOpenApiIntegrationTest`(member 쪽 app 테스트로 집계)가 확인한다. 실행 결과는 [regression-log.md](regression-log.md).
+- 요구사항 19건(GL-T001~GL-T019). JUnit 테스트 94건(global 54, app 40: `SecurityChainIntegrationTest` 11, `CsrfIntegrationTest` 9, `AccessTokenCookieIntegrationTest` 6, `LiveStreamingApplicationTests` 3, OpenAPI 4, `ModuleBoundaryTest` 7). GL-T015는 `AuthOpenApiIntegrationTest`(member 쪽 app 테스트로 집계)가 확인한다. 실행 결과는 [regression-log.md](regression-log.md).

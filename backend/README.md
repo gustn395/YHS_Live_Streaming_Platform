@@ -135,7 +135,7 @@ backend/
 | `out` | 나가는 어댑터: JPA/MyBatis Repository, Redis, MediaMTX·결제·S3 클라이언트 |
 
 - 의존 방향: `in → app → domain`, `out → app(포트 구현)·domain`. `app`은 `out`을 직접 참조하지 않고 포트 인터페이스로만 쓴다.
-- 다른 도메인은 그 도메인의 `app` 공개 API로만 호출한다. 다른 도메인의 `domain`·`out`을 직접 참조하지 않는다.
+- 다른 도메인은 그 도메인의 `app` 공개 API로만 호출한다. 다른 도메인의 `domain`·`out`을 직접 참조하지 않는다. 공개 패키지와 자동 검사(ArchUnit)는 [G-D015](../docs/policy.md#3-공통-결정-이력)를 따른다(member는 `member.app.api`).
 - 계층 패키지(`in/app/domain/out`)는 미리 만들지 않는다(Q2). 그 계층의 코드를 처음 넣을 때 만든다.
 
 ### 도메인 구현을 시작할 때
@@ -158,10 +158,11 @@ backend/
 2. `modules/global/build.gradle.kts`에 `plugins { id("yhs.domain-module-conventions") }`
 3. `app/build.gradle.kts`에 `implementation(project(":modules:global"))` 추가
 4. 기본 패키지 `com.yhs.livestreaming.global`에 `package-info.java`
+5. 도메인 모듈이면 app 테스트 `ModuleBoundaryTest`의 도메인 모듈 목록에 기본 패키지를 더한다([G-D015](../docs/policy.md#3-공통-결정-이력))
 
 ## 6. 의존성 도입 계획 (Q3)
 
-지금은 `spring-boot-starter-webmvc`, `spring-boot-starter-actuator`, `spring-boot-starter-tomcat-runtime`(providedRuntime), `spring-boot-starter-test`와 global 모듈의 `spring-boot-starter-security`·`-validation`·`-data-jpa`·springdoc·`spring-security-oauth2-jose`, member 모듈의 `spring-boot-starter-data-redis`·`-mail`·`-security-oauth2-client`, app의 `spring-boot-starter-flyway`·PostgreSQL 드라이버·`flyway-database-postgresql`, 테스트용 `spring-boot-starter-webmvc-test`(app)·`spring-boot-starter-security-test`(app, global)·`spring-boot-starter-data-jpa-test`(member)·`spring-boot-testcontainers`와 Testcontainers PostgreSQL(app, member)·`spring-boot-starter-data-redis-test`(member)·Redis 테스트용 `spring-boot-starter-data-redis`(app)·가짜 OIDC 공급자 서명용 `spring-security-oauth2-jose`(app 테스트)가 있다. 나머지는 아래 시점에 추가한다. 실행·테스트 클래스패스를 해석할 때 Boot·Framework 모듈 버전이 섞이면 실패한다([G-D012](../docs/policy.md#3-공통-결정-이력)). 이 검사는 IDE의 Gradle 동기화에도 똑같이 걸리므로, 동기화가 "Spring 버전 불일치"로 실패하면 메시지에 나온 의존성을 확인한다. 버전은 Spring Boot 4.1.3 BOM 기준이며, BOM이 관리하지 않는 것만 `gradle/libs.versions.toml`에 고정한다.
+지금은 `spring-boot-starter-webmvc`, `spring-boot-starter-actuator`, `spring-boot-starter-tomcat-runtime`(providedRuntime), `spring-boot-starter-test`와 global 모듈의 `spring-boot-starter-security`·`-validation`·`-data-jpa`·springdoc·`spring-security-oauth2-jose`, member 모듈의 `spring-boot-starter-data-redis`·`-mail`·`-security-oauth2-client`, app의 `spring-boot-starter-flyway`·PostgreSQL 드라이버·`flyway-database-postgresql`, 테스트용 `spring-boot-starter-webmvc-test`(app)·`spring-boot-starter-security-test`(app, global)·`spring-boot-starter-data-jpa-test`(member)·`spring-boot-testcontainers`와 Testcontainers PostgreSQL(app, member)·`spring-boot-starter-data-redis-test`(member)·Redis 테스트용 `spring-boot-starter-data-redis`(app)·가짜 OIDC 공급자 서명용 `spring-security-oauth2-jose`(app 테스트)·모듈 경계 검사용 ArchUnit(app 테스트)이 있다. 나머지는 아래 시점에 추가한다. 실행·테스트 클래스패스를 해석할 때 Boot·Framework 모듈 버전이 섞이면 실패한다([G-D012](../docs/policy.md#3-공통-결정-이력)). 이 검사는 IDE의 Gradle 동기화에도 똑같이 걸리므로, 동기화가 "Spring 버전 불일치"로 실패하면 메시지에 나온 의존성을 확인한다. 버전은 Spring Boot 4.1.3 BOM 기준이며, BOM이 관리하지 않는 것만 `gradle/libs.versions.toml`에 고정한다.
 
 | 기술 | 도입 시점 | 버전 (4.1.3 기준) | 주의 |
 | --- | --- | --- | --- |
@@ -175,6 +176,7 @@ backend/
 | springdoc OpenAPI | global 공통 기반 (Issue #8) | 3.1.1 (Boot 4.1.0으로 빌드된 릴리스) — BOM 미관리, `libs.versions.toml` | Boot 3용 2.x, Boot 4.2용 3.2.x는 쓸 수 없다(4.2.x 모듈을 끌어와 버전이 섞인다). 운영 기본 비활성([G-D008](../docs/policy.md#3-공통-결정-이력), [G-D012](../docs/policy.md#3-공통-결정-이력)) |
 | JSP / JSTL | 관리자 화면 | Jasper 11.0.27, JSTL API 3.0.2, 구현체 3.0.1 (BOM) | 7장 확인 결과 참고 |
 | WebSocket / STOMP | Chat | `spring-boot-starter-websocket` (BOM) | |
+| ArchUnit (`archunit-junit5`) | 모듈 경계 검사 (BE-07, 도입함: app 테스트) | 1.5.1 — BOM 미관리, `libs.versions.toml` | 테스트 의존성만. 규칙은 [G-D015](../docs/policy.md#3-공통-결정-이력) |
 | MyBatis | 복잡한 조회가 실제로 필요할 때 | starter 4.x (확인 시점 4.1.0) — BOM 미관리 | Boot 3용 3.0.x는 쓸 수 없다 |
 
 ## 7. JSP 확인 결과 (Q6: 저장소 밖 임시 실험)

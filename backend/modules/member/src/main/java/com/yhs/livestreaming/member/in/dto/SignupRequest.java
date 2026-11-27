@@ -37,8 +37,7 @@ public record SignupRequest(
 
         @Schema(description = "닉네임. 2~20자(code point), 중복 허용, 제어·서식 문자 금지", example = "테스터")
         @NotBlank
-        @Pattern(regexp = "^[^\\p{Cc}\\p{Cf}]{2,20}$",
-                message = "닉네임은 2~20자이고 제어 문자·보이지 않는 서식 문자를 쓸 수 없습니다.")
+        @Pattern(regexp = NicknameFormat.REGEXP, message = NicknameFormat.MESSAGE)
         String nickname) {
 
     private static final java.util.regex.Pattern ASCII_USERNAME_CHARS =

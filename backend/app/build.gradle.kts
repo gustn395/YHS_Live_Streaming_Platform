@@ -39,6 +39,8 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-data-redis")
     // 가짜 OIDC 공급자의 ID Token 서명(테스트 전용, MB-D023). Nimbus는 이 모듈을 통해 BOM이 정한 버전으로 들어온다
     testImplementation("org.springframework.security:spring-security-oauth2-jose")
+    // 모듈 경계 검사(G-D015): 다른 모듈은 member.app.api만 참조, global은 도메인 모듈을 참조하지 않음
+    testImplementation(libs.archunit.junit5)
 
     // 외부 Tomcat에 배포할 때 컨테이너가 제공하는 런타임은 plain WAR에서 빠지도록 providedRuntime으로 둔다.
     // (실행 가능한 WAR에는 WEB-INF/lib-provided로 포함되어 java -jar 실행이 된다)
