@@ -27,6 +27,12 @@ export default defineConfig([
     languageOptions: { ecmaVersion: 2023, globals: globals.browser },
   },
   { files: ['vite.config.ts', 'scripts/**/*.ts'], languageOptions: { globals: globals.node } },
+  // 로컬 E2E(FE-D039): Node에서 실행하고 앱 소스(src)를 import하지 않는다(실제 화면만 조작한다).
+  {
+    files: ['playwright.config.ts', 'e2e/**/*.ts'],
+    languageOptions: { globals: globals.node },
+    rules: restrict(R.alias, { regex: '(?:^|/)src(?:/|$)', message: 'E2E는 앱 소스를 import하지 않는다(실제 화면만 조작).' }),
+  },
 
   // 운영 코드 계층별 규칙. 같은 규칙은 뒤의 설정이 덮어쓰므로 영역마다 전체 목록을 준다.
   { files: ['src/main.tsx', 'src/app/**'], ignores: TESTS, rules: restrict(R.alias, R.test, R.msw, R.axios) },

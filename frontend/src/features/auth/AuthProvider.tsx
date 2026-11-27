@@ -141,6 +141,19 @@ export function AuthProvider<P>({
     if (state.status === 'initializing' && state.initError !== null) startInit('INIT_RETRY');
   }, [state, startInit]);
 
-  const value = useMemo<AuthContextValue>(() => ({ state, retry }), [state, retry]);
+  const completeLogin = useCallback(
+    (principal: unknown) => {
+      // 초기화 결과가 나기 전에는 열지 않는다(Reducer도 initializing에서는 반영하지 않는다).
+      if (!initDoneRef.current) return false;
+      const epoch = scope.currentEpoch();
+      // scope가 먼저 세대를 올려 이전 세대 session 요청을 취소하고, Reducer는 같은 직전 세대로 전이한다.
+      if (!scope.markAuthenticated(epoch)) return false;
+      dispatch({ type: 'LOGIN_SUCCEEDED', epoch, principal: principal as P });
+      return true;
+    },
+    [scope],
+  );
+
+  const value = useMemo<AuthContextValue>(() => ({ state, retry, completeLogin }), [state, retry, completeLogin]);
   return <AuthContext value={value}>{children}</AuthContext>;
 }

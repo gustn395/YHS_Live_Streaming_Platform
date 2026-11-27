@@ -27,7 +27,9 @@ export type AuthEvent<P> =
   | { type: 'INIT_RETRY'; requestId: number; epoch: number }
   | { type: 'INIT_SUCCEEDED'; requestId: number; epoch: number; result: InitResult<P> }
   | { type: 'INIT_FAILED'; requestId: number; epoch: number; error: InitError }
-  | { type: 'SESSION_LOST'; epoch: number };
+  | { type: 'SESSION_LOST'; epoch: number }
+  /** 로그인(OTP 확인) 성공(FE-D034). epoch는 성공을 반영하기 직전 세대다. */
+  | { type: 'LOGIN_SUCCEEDED'; epoch: number; principal: P };
 
 export const initialAuthState: AuthState<never> = {
   status: 'initializing',
@@ -38,7 +40,7 @@ export const initialAuthState: AuthState<never> = {
 
 /**
  * 순수 함수다(FE-D009). 반영하지 않는 이벤트는 같은 참조를 돌려준다.
- * 세대는 새 인증 성공과 세션 상실에서만 올린다(FE-D011).
+ * 세대는 새 인증 성공(초기화·로그인)과 세션 상실에서만 올린다(FE-D011, FE-D034).
  */
 export function authReducer<P>(state: AuthState<P>, event: AuthEvent<P>): AuthState<P> {
   switch (event.type) {
@@ -63,6 +65,11 @@ export function authReducer<P>(state: AuthState<P>, event: AuthEvent<P>): AuthSt
     case 'SESSION_LOST':
       if (state.status !== 'authenticated' || state.epoch !== event.epoch) return state;
       return { status: 'unauthenticated', epoch: state.epoch + 1, reason: 'sessionLost' };
+
+    case 'LOGIN_SUCCEEDED':
+      // 초기화가 끝난 상태에서만 연다. 같은 탭 재로그인은 주체를 바꾼다(FE-D034, FE-D016은 다시 초기화하지 않는다).
+      if (state.status === 'initializing' || state.epoch !== event.epoch) return state;
+      return { status: 'authenticated', epoch: state.epoch + 1, principal: event.principal };
   }
 }
 

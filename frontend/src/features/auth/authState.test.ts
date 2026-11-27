@@ -24,6 +24,35 @@ const failed = (requestId: number, epoch = 0): AuthEvent<P> => ({
   error: { kind: 'unavailable', status: 503, code: 'AUTH_SESSION_STORE_UNAVAILABLE' },
 });
 
+// FE-T032: 로그인(OTP 확인) 성공 전환(FE-D034)
+describe('LOGIN_SUCCEEDED', () => {
+  const login = (epoch: number, id = 'm2'): AuthEvent<P> => ({ type: 'LOGIN_SUCCEEDED', epoch, principal: { id } });
+  const unauth = reduce(initialAuthState, started(1), unauthenticated(1));
+
+  it('unauthenticated에서 authenticated가 되고 세대를 1 올린다', () => {
+    expect(reduce(unauth, login(0))).toEqual({ status: 'authenticated', epoch: 1, principal: { id: 'm2' } });
+  });
+
+  it('authenticated에서 다시 로그인하면 주체를 바꾸고 세대를 1 올린다', () => {
+    const authed = reduce(initialAuthState, started(1), succeeded(1));
+    expect(reduce(authed, login(1, 'm3'))).toEqual({ status: 'authenticated', epoch: 2, principal: { id: 'm3' } });
+  });
+
+  it('세션 상실 뒤(unauthenticated·sessionLost)에도 로그인할 수 있다', () => {
+    const lost = reduce(initialAuthState, started(1), succeeded(1), { type: 'SESSION_LOST', epoch: 1 });
+    expect(reduce(lost, login(2))).toEqual({ status: 'authenticated', epoch: 3, principal: { id: 'm2' } });
+  });
+
+  it('initializing에서는 반영하지 않는다(같은 참조)', () => {
+    const initializing = reduce(initialAuthState, started(1));
+    expect(reduce(initializing, login(0))).toBe(initializing);
+  });
+
+  it('세대가 다르면 반영하지 않는다(같은 참조)', () => {
+    expect(reduce(unauth, login(1))).toBe(unauth);
+  });
+});
+
 describe('초기 상태', () => {
   it('initializing, 세대 0, 오류 없음', () => {
     expect(initialAuthState).toEqual({ status: 'initializing', epoch: 0, initRequestId: 0, initError: null });

@@ -1,0 +1,104 @@
+/* 로그인·OTP 폼(FE-D027, FE-D028). 회원가입 폼과 같은 모양이고 색·간격은 src/styles/tokens.css의 CSS 변수만 쓴다. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.label {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.input {
+  min-width: 0;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+/* OTP 4자리: 숫자 간격을 넓혀 읽기 쉽게 한다 */
+.otpInput {
+  letter-spacing: 0.5em;
+  font-size: 1.25rem;
+  text-align: center;
+}
+
+.input:focus-visible,
+.submit:focus-visible,
+.secondary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.inputInvalid {
+  border-color: var(--color-danger);
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.banner {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  color: var(--color-text);
+}
+
+.bannerError {
+  border: 1px solid var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+.bannerWarning {
+  border: 1px solid var(--color-border);
+  background: var(--color-warning-bg);
+}
+
+.submit {
+  min-height: 44px;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--color-brand);
+  color: var(--color-on-brand);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* 보조 동작(재발송, Google 로그인): 테두리 버튼 */
+.secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-brand);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.submit:disabled,
+.secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

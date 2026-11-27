@@ -1,0 +1,48 @@
+# 로컬 E2E·수동 확인 전용 서버 묶음(frontend FE-D039). 운영 구성이 아니다.
+#
+# - 프로젝트 이름은 yhs-e2e로 고정한다. 초기화·종료는 이 프로젝트에만 `down -v`로 한다:
+#     docker compose -p yhs-e2e -f infrastructure/docker/e2e/compose.yml down -v
+#   postgres·redis 이미지는 데이터 경로를 익명 볼륨으로 선언하므로 `down`·`restart`만으로는 데이터가 지워지지 않는다.
+#   다른 Docker 프로젝트·전체 볼륨은 건드리지 않고 `docker system prune`은 쓰지 않는다.
+# - 비밀번호는 기본값 없는 환경변수로만 받는다(공개 저장소). 실행자가 매번 만들어 Backend에도 같은 값을 넘긴다.
+# - 포트는 127.0.0.1에만 열고 E2E 전용 비표준 번호를 쓴다(로컬 DB·Redis와 충돌 방지).
+# - 이미지 태그는 Backend Testcontainers와 같게 고정한다.
+# 실행 절차의 원본은 docs/frontend/test-spec.md(E2E 실행 절차)다.
+name: yhs-e2e
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: yhs
+      POSTGRES_USER: yhs
+      POSTGRES_PASSWORD: ${E2E_POSTGRES_PASSWORD:?E2E_POSTGRES_PASSWORD를 설정하세요(기본값 없음)}
+    ports:
+      - "127.0.0.1:15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yhs -d yhs"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "127.0.0.1:16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit:v1.21.0
+    ports:
+      - "127.0.0.1:11025:1025"
+      - "127.0.0.1:18025:8025"
+    healthcheck:
+      # 이미지 내장 검사와 같은 명령, 간격만 줄인다(up --wait가 빨리 끝나게)
+      test: ["CMD-SHELL", "/mailpit readyz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

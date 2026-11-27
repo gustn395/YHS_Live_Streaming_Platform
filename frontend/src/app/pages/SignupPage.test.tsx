@@ -75,7 +75,8 @@ describe('가입 완료 흐름', () => {
   it('state 없이 완료 화면에 직접 오면 가입 화면으로 replace 이동한다', async () => {
     const router = renderAt(['/', '/signup/complete'], 1);
     await waitFor(() => expect(router.state.location.pathname).toBe('/signup'));
-    expect(screen.getByRole('heading', { name: '회원가입' })).toBeInTheDocument();
+    // 라우터 상태는 화면 커밋보다 먼저 바뀌므로 기다렸다가 찾는다(FE-04 S4)
+    expect(await screen.findByRole('heading', { name: '회원가입' })).toBeInTheDocument();
     await router.navigate(-1);
     await waitFor(() => expect(router.state.location.pathname).toBe('/'));
   });

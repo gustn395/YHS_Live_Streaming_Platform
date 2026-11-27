@@ -37,7 +37,11 @@ frontend(React SPA) 전용 규칙만 둔다. 공통 규칙은 [루트 AGENTS.md]
   없이 쓰지 않는다([FE-D008](../docs/frontend/decisions.md#1-확정-결정)).
 - 상태 변경 요청의 CSRF 헤더는 공통 API Client가 붙인다. 화면 코드는 `XSRF-TOKEN` 쿠키를 직접 읽지 않는다
   ([FE-D020](../docs/frontend/decisions.md#1-확정-결정)).
+- 로컬 E2E는 `infrastructure/docker/e2e/compose.yml`의 `yhs-e2e` 프로젝트만 쓰고, 초기화·종료는 그 프로젝트의 `down -v`로 한다.
+  다른 Docker 프로젝트·전체 볼륨은 건드리지 않고 비밀 값은 저장소에 두지 않는다([FE-D039](../docs/frontend/decisions.md#1-확정-결정)).
 
 ## 6. 미정 규칙 상태
 
-- Backend 인증 계약 연동 규칙 — [FE-U02](../docs/frontend/decisions.md#2-미결) 확정 뒤 정한다.
+- 앱 시작 때 인증 복원·로그아웃·Refresh 연동 규칙 — [FE-U02](../docs/frontend/decisions.md#2-미결) 확정 뒤 정한다. 로그인·OTP 연동은
+  [FE-D034](../docs/frontend/decisions.md#1-확정-결정)~[FE-D038](../docs/frontend/decisions.md#1-확정-결정)을 따른다.
+- E2E의 CI 연동 — [FE-U11](../docs/frontend/decisions.md#2-미결).
