@@ -133,7 +133,7 @@ describe('접근성', () => {
 
   it('비밀번호 길이 안내를 항상 보인다', () => {
     renderForm();
-    expect(field(/^비밀번호$/)).toHaveAccessibleDescription(expect.stringContaining('15~64자'));
+    expect(field(/^비밀번호$/)).toHaveAccessibleDescription(expect.stringContaining('10~30자, 공백도 쓸 수 있습니다'));
   });
 
   it('username에 대문자가 있으면 소문자로 바뀐다고 안내하고 입력값은 그대로 둔다', async () => {
@@ -680,6 +680,30 @@ describe('CodeRabbit 반영', () => {
 
 // FE-T026(보완): Retry-After 대기는 서버가 정한 시각까지 유지한다(지적 3)
 describe('Retry-After 대기', () => {
+  // BE-06(MB-D027): 제한 수치는 화면에 두지 않고 Retry-After만 쓴다. 전환 기간에는 600초보다 긴 값도 온다
+  it.each<[number, number]>([
+    [600, 10],
+    [601, 11],
+    [3600, 60],
+  ])('Retry-After %i초는 약 %i분으로 안내하고 그 시각 전에는 버튼을 막는다', async (seconds, minutes) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    respond(429, { code: 'COMMON_TOO_MANY_REQUESTS' }, { ...PROBLEM_JSON, 'Retry-After': String(seconds) });
+    document.cookie = 'XSRF-TOKEN=t1; path=/';
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<SignupForm client={createApiClient()} onSuccess={vi.fn()} />);
+    await fillValid(user);
+    await user.click(submit());
+    expect(await screen.findByText(`요청이 많습니다. 약 ${minutes}분 뒤 다시 시도해 주세요.`)).toBeInTheDocument();
+    await act(async () => {
+      vi.advanceTimersByTime(seconds * 1000 - 1000);
+    });
+    expect(submit()).toBeDisabled();
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(submit()).toBeEnabled();
+  });
+
   it('브라우저 타이머 최대값(2^31-1ms)보다 긴 대기도 그 시각 전에는 버튼을 풀지 않는다', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const seconds = 3_000_000; // 약 34.7일 > 2^31-1ms(약 24.8일)

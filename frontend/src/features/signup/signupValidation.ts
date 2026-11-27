@@ -8,8 +8,8 @@ export const MESSAGES = {
   usernameRequired: '아이디를 입력해 주세요.',
   usernamePattern: '아이디는 영문 소문자·숫자·_ 4~20자입니다.',
   passwordRequired: '비밀번호를 입력해 주세요.',
-  passwordTooShort: '비밀번호는 15자 이상이어야 합니다.',
-  passwordTooLong: '비밀번호는 64자 이하여야 합니다.',
+  passwordTooShort: '비밀번호는 10자 이상이어야 합니다.',
+  passwordTooLong: '비밀번호는 30자 이하여야 합니다.',
   passwordContextWord: '아이디나 서비스 이름을 바탕으로 한 비밀번호는 쓸 수 없습니다.',
   passwordConfirmRequired: '비밀번호를 한 번 더 입력해 주세요.',
   passwordMismatch: '비밀번호 확인이 일치하지 않습니다.',
@@ -30,8 +30,9 @@ export interface SignupInput {
 export type SignupField = keyof SignupInput;
 export type SignupFieldErrors = Partial<Record<SignupField, string>>;
 
-const PASSWORD_MIN = 15;
-const PASSWORD_MAX = 64;
+// 새 비밀번호 길이(MB-D026). 로그인 화면은 길이를 검사하지 않는다(FE-D033)
+const PASSWORD_MIN = 10;
+const PASSWORD_MAX = 30;
 const EMAIL_MAX_UTF16 = 255; // Backend @Size(max = 255)는 Java String 길이(UTF-16 단위)
 const SERVICE_WORDS = new Set(['yhslivestreaming', 'yhslive', 'livestreaming', 'yhs']);
 

@@ -8,7 +8,7 @@
 | --- | --- | --- | --- |
 | FE-W01 | FE-01 React 공통 인증 기반(FE-01-1~8: 작업 환경, 공통 구조, API Client, 인증 상태, 공통 오류 처리, 라우팅, 테스트·검증, 문서·리뷰) | #11 | 완료(#14) |
 | FE-W02 | FE-02 Frontend CI 구축 및 Backend·Frontend CI 독립성 보장([fe02-ci-split.md](../testing/fe02-ci-split.md)) | #16 | 완료(#18) |
-| FE-W03 | FE-03 회원가입 화면 및 CSRF 토큰 연동(member MB-W12의 가입 부분) | #20 | 구현·자동 테스트·S6·S10 리뷰 반영·M-02(8번 제외) 완료(커밋 전), S7 전 |
+| FE-W03 | FE-03 회원가입 화면 및 CSRF 토큰 연동(member MB-W12의 가입 부분) | #20 | 구현 커밋 acf2c7e·CodeRabbit 반영 23fc681 Push, BE-06 가입 정책 반영 중(커밋 전). member BE-06(#24)은 main 병합(#25 `774b493`), FE-D033 (5) 계약 비교 일치 |
 
 - 연결: member [MB-W12](../member/PROGRESS.md#1-작업-상태)(React 인증 화면).
 

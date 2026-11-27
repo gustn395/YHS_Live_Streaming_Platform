@@ -305,3 +305,26 @@ Backend 기준을 `origin/main`(`cea2deb`, BE-04 #19 포함)이 아닌 `d47736c`
 - 수 집계용 JSON 실행(`npm --prefix frontend exec -- vitest run --reporter=json`)은 저장소 루트에서 실행돼 Vitest 설정(jsdom)을 읽지 못하고
   167건이 `document is not defined`로 실패했다. 실행 방법 오류라 결과로 쓰지 않고 파일별 테스트 수만 셌다.
 - 미실행: CR-1(`overflow-wrap: anywhere`) 긴 아이디 안내 줄바꿈과 토글 눌림 스타일의 브라우저 수동 확인. 실제 Backend 연동(M-02) 재실행.
+
+### 2026-11-27 FE-03(Issue #20) member BE-06 가입 정책 반영 — 기준 커밋 23fc681 + 작업 트리(커밋 전)
+
+대상: [FE-D033](decisions.md#1-확정-결정)(비밀번호 길이 MB-D026, 가입 제한 MB-D027). Backend 계약 근거는 `origin/feature/24-member-signup-policy`
+(`dd071d6`, main 미병합)의 `PasswordPolicy`(10~30)·`PasswordViolation`(문구)·`MemberLimitProperties`(10분 20회)를 읽기 전용으로 확인했다.
+모두 Claude가 실행했고 Backend는 실행하지 않았다.
+
+| 단계 | 명령 | 결과 |
+| --- | --- | --- |
+| RED | `npm --prefix frontend run test -- --run src/features/signup` | 6건 실패(기대한 이유): 10·9자, code point(이모지 9·10·30·31), 30·31자, 공백 포함 10·9자, 오류 문구, 안내 문구 |
+| 처음부터 통과(RED 아님) | 같은 명령 | NFC 정규화 뒤 길이(NFD 9·30자), Retry-After 600·601·3600초 3건 |
+| Mutation | 임시 변경 뒤 해당 테스트만 실행, 파일 복원(`cmp` 일치) | NFC 정규화 제거 → NFC 테스트 실패. `Math.ceil` → `Math.round` → 601초 테스트 실패. `blockUntil` 제거 → Retry-After 3건 실패 |
+| GREEN 첫 전체 실행 | `npm --prefix frontend run test -- --run` | 1건 실패: `src/test/eslintBoundaries.test.ts` "shared → features"(15691ms). 단독 실행 25건 통과, 바로 다시 한 전체 실행 397건 통과. 원인 미확정(이번 변경과 무관한 파일), 간헐 실패로 기록 |
+| S5 | `npm --prefix frontend run lint` / `typecheck` | 종료 0 / 종료 0 |
+| S5 | `npm --prefix frontend run test -- --run` 2회 | 23파일 397건 통과 2회 |
+| S5 | `npm --prefix frontend run build` | 종료 0, check-dist 가안 표지 없음 |
+| S5 | 보이지 않는 문자 검사, `git diff --check`, 제한 수치 grep(`20회`·`10분`·`시간당`·`600`, 테스트 제외) | 0건, 오류 없음, 가입 제한 수치 없음(요청 Timeout 주석 1건만) |
+
+- FE-D033 (5) 계약 확인(BE-06 main 병합 뒤): `origin/main` `774b493`(#25)의 Backend는 `dd071d6`과 diff 없음. `PasswordPolicy`는 `PasswordNormalization.nfc` 뒤 `codePointCount`로 10~30, `PasswordViolation` 문구 2개가 Frontend `MESSAGES`와 같음, `MemberLimitProperties` signup은 `Window(20, 10분)`이고 Frontend 코드에는 수치 없음. main은 `d47736c` 이후 Frontend 파일을 바꾸지 않았다. 함께 실행한 Vitest 전체는 위 S5(397건)다.
+- 이 브랜치의 `docs/member/decisions.md`에는 MB-D026·D027이 없다(main에만 있음). main 반영(병합·rebase)은 승인 범위 밖이라 하지 않았고, Squash Merge 뒤 main에서 링크가 이어진다.
+- S6 반영(문서 3건) 뒤 S5 재실행: lint·typecheck 0, 23파일 397건 통과, build 0, 보이지 않는 문자 0건, `git diff --check` 오류 없음.
+- S7(이해도 퀴즈)은 사용자 결정으로 생략했다(질문 1/6만 출제, 답 없음). Skill 게이트 확인은 S7 미완료 1건으로 종료 코드 1이다.
+- 미실행: 실제 Backend 연동(FE-D033 (5)에 따라 코드 비교 + Vitest 전체로 대신함), 안내 문구의 브라우저 표시 확인.

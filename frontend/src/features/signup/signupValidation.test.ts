@@ -32,25 +32,33 @@ describe('username', () => {
   });
 });
 
-describe('비밀번호 길이(NFC code point)', () => {
+describe('비밀번호 길이(NFC code point, MB-D026 10~30자)', () => {
   const ok = (password: string) => validatePassword(password, 'tester01');
-  it('15자는 통과, 14자는 짧음', () => {
-    expect(ok('abcdefghijklmno')).toBeNull();
-    expect(ok('abcdefghijklmn')).toBe(MESSAGES.passwordTooShort);
+  it('10자는 통과, 9자는 짧음', () => {
+    expect(ok('abcdefghij')).toBeNull();
+    expect(ok('abcdefghi')).toBe(MESSAGES.passwordTooShort);
   });
   it('UTF-16이 아니라 code point로 센다', () => {
-    expect(ok('😀'.repeat(14))).toBe(MESSAGES.passwordTooShort);
-    expect(ok('😀'.repeat(15))).toBeNull();
+    expect(ok('😀'.repeat(9))).toBe(MESSAGES.passwordTooShort);
+    expect(ok('😀'.repeat(10))).toBeNull();
+    expect(ok('😀'.repeat(30))).toBeNull(); // UTF-16으로는 60
+    expect(ok('😀'.repeat(31))).toBe(MESSAGES.passwordTooLong);
   });
   it('NFC로 정규화한 뒤 센다', () => {
-    expect(ok('é'.repeat(14).normalize('NFD'))).toBe(MESSAGES.passwordTooShort);
+    expect(ok('é'.repeat(9).normalize('NFD'))).toBe(MESSAGES.passwordTooShort); // NFD로는 18
+    expect(ok('é'.repeat(30).normalize('NFD'))).toBeNull(); // NFD로는 60
   });
-  it('64자는 통과, 65자는 김', () => {
-    expect(ok('a'.repeat(64))).toBeNull();
-    expect(ok('a'.repeat(65))).toBe(MESSAGES.passwordTooLong);
+  it('30자는 통과, 31자는 김', () => {
+    expect(ok('a'.repeat(30))).toBeNull();
+    expect(ok('a'.repeat(31))).toBe(MESSAGES.passwordTooLong);
   });
   it('공백을 그대로 둔다(Trim 없음)', () => {
-    expect(ok('  abcdefghijk  ')).toBeNull();
+    expect(ok('  abcdef  ')).toBeNull(); // 공백 포함 10자
+    expect(ok(' abcdefg ')).toBe(MESSAGES.passwordTooShort); // 공백 포함 9자
+  });
+  it('오류 문구는 Backend PasswordViolation과 같다', () => {
+    expect(MESSAGES.passwordTooShort).toBe('비밀번호는 10자 이상이어야 합니다.');
+    expect(MESSAGES.passwordTooLong).toBe('비밀번호는 30자 이하여야 합니다.');
   });
   it('비어 있으면 입력 요청', () => {
     expect(ok('')).toBe(MESSAGES.passwordRequired);

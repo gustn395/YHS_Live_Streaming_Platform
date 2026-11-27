@@ -71,7 +71,7 @@ CSRF 부착·오류 분류·회원가입 화면·스타일 기반이다.
   실패한 발급은 복구 요구를 남긴다. 세대가 바뀐 응답도 `markInvalid`를 먼저 거친 뒤 `canceled`로 버린다(재전송 없음).
 - 오류 표시 분류(`errorPresentation.ts`): forbidden(403, CSRF 제외)·retry-later(503 `AUTH_SESSION_STORE_UNAVAILABLE`)·common(`csrf-unavailable` 포함)·
   caller·csrf-retry(403 `AUTH_CSRF_INVALID`)·silent. `classifyInitFailure`는 `csrf-unavailable`을 `unexpected` initError로 둔다.
-- 회원가입(`src/features/signup/`): `signupValidation.ts`(Backend 규칙 재현 범위는 [FE-D031](decisions.md#1-확정-결정), `javaStrip`·
+- 회원가입(`src/features/signup/`): `signupValidation.ts`(Backend 규칙 재현 범위는 [FE-D031](decisions.md#1-확정-결정), 비밀번호 길이 상수는 [FE-D033](decisions.md#1-확정-결정)(MB-D026), `javaStrip`·
   `normalizeUsername`·필드별 검증, 이메일은 마지막 `@` 기준·local part의 따옴표 조각과 그 안의 백슬래시 이스케이프 허용), `signupApi.ts`(`submitSignup`, 상태 201과 본문을 함께 검사),
   `SignupForm.tsx`(React state, blur·재검사·제출 시 전체, 서버 오류 코드별 고정 문구, 코드별 안내는 계약 상태와 함께(중복 409, 유출 400), CSRF가 아닌 403도 화면에 머물러 공통 배너([FE-D032](decisions.md#1-확정-결정)), 동기 플래그로 제출 1건, 언마운트 시 요청 취소·타이머 정리, 비밀번호 토글은 글자 "표시" 고정·`aria-pressed`·눌림 스타일 `togglePressed`).
   서버 필드 오류는 제출 때 값과 지금 값을 Backend가 판정하는 값(username 소문자, 이메일 strip·소문자, 닉네임 strip, 비밀번호 원문)으로

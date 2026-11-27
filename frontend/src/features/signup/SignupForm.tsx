@@ -27,7 +27,7 @@ const LABELS: Record<SignupField, string> = {
 const HINTS: Partial<Record<SignupField, string>> = {
   username: '영문 소문자·숫자·_ 4~20자',
   nickname: '2~20자, 다른 사람과 같아도 됩니다',
-  password: '15~64자, 문장처럼 길게 써도 됩니다',
+  password: '10~30자, 공백도 쓸 수 있습니다',
 };
 
 const AUTOCOMPLETE: Record<SignupField, string> = {
