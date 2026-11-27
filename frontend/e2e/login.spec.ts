@@ -3,7 +3,8 @@ import { createAccount, type TestAccount } from './support/accounts';
 import { messageIds, waitForNewOtp } from './support/mailpit';
 
 /**
- * 로컬 E2E(FE-D039): 실제 Backend·Mailpit으로 일반 로그인 → 이메일 OTP 흐름을 확인한다(test-spec E2E-01~03).
+ * E2E(FE-D039, CI 실행 FE-D044): 실제 Backend·Mailpit으로 일반 로그인 → 이메일 OTP 흐름을 확인한다(test-spec E2E-01~03).
+ * 단언 실패 출력에 OTP·쿠키 값이 찍히지 않게 쓴다(CI 로그는 공개된다).
  * 앱 소스를 import하지 않고 화면에 보이는 이름으로만 조작한다.
  */
 
@@ -39,7 +40,9 @@ test('E2E-01 일반 로그인 → OTP → 원래 화면으로 이동하고 인�
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByRole('heading', { name: '내 화면' })).toBeVisible();
   const access = (await context.cookies()).find((c) => c.name === '__Host-yhs_at');
-  expect(access).toMatchObject({ httpOnly: true, secure: true, sameSite: 'Strict', path: '/' });
+  // 실패 출력에 쿠키 값(토큰)이 찍히지 않게 검사할 속성만 꺼내 비교한다(fe06-e2e-ci.md Q10)
+  const attributes = access && { httpOnly: access.httpOnly, secure: access.secure, sameSite: access.sameSite, path: access.path };
+  expect(attributes, '__Host-yhs_at 쿠키 속성').toEqual({ httpOnly: true, secure: true, sameSite: 'Strict', path: '/' });
 });
 
 test('E2E-02 OTP를 틀리면 안내하고 입력을 비우며, 맞는 번호로 성공한다', async ({ page }) => {
@@ -50,13 +53,17 @@ test('E2E-02 OTP를 틀리면 안내하고 입력을 비우며, 맞는 번호로
 
   await enterOtp(page, anotherCode(otp));
   await expect(page.getByRole('alert')).toHaveText('인증 번호가 일치하지 않습니다. 다시 입력해 주세요.');
-  await expect(page.getByLabel('인증 번호')).toHaveValue('');
+  // 입력값(OTP)이 실패 출력에 찍히지 않게 길이만 기다려 확인한다(fe06-e2e-ci.md Q10)
+  await expect
+    .poll(async () => (await page.getByLabel('인증 번호').inputValue()).length, { message: '오입력 뒤 인증 번호 입력이 비워져야 한다' })
+    .toBe(0);
 
   await enterOtp(page, otp);
   await expect(page).toHaveURL(/\/app$/);
 });
 
-test('E2E-03 60초 뒤 재발송하면 새 번호가 오고, 이전 번호는 거부되며 새 번호로 성공한다', async ({ page }) => {
+// @slow: 재발송 60초 대기. CI의 PR 실행에서는 빼고 main push·수동 실행에서 돈다(FE-D044 (2))
+test('E2E-03 60초 뒤 재발송하면 새 번호가 오고, 이전 번호는 거부되며 새 번호로 성공한다 @slow', async ({ page }) => {
   test.setTimeout(120_000);
   const account = await createAccount();
   await page.goto('/login');
@@ -70,7 +77,7 @@ test('E2E-03 60초 뒤 재발송하면 새 번호가 오고, 이전 번호는 �
   await expect(page.getByRole('status')).toHaveText('새 인증 번호를 보냈습니다. 메일을 확인해 주세요.');
   const second = await waitForNewOtp(account.email, beforeResend);
   // Backend는 최근에 보낸 번호와 같은 번호를 다시 뽑는다(member BE-03). 같으면 이전 번호 무효를 확인할 수 없다
-  expect(second).not.toBe(first);
+  expect(second === first, '재발송 번호가 이전 번호와 달라야 한다(번호는 출력하지 않는다)').toBe(false);
 
   await enterOtp(page, first);
   await expect(page.getByRole('alert')).toHaveText('인증 번호가 일치하지 않습니다. 다시 입력해 주세요.');

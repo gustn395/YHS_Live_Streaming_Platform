@@ -23,7 +23,8 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],
-      include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts'],
+      // e2e/support의 단위 테스트(HIBP 스텁, FE-T040)도 여기서 돈다. Playwright는 *.spec.ts만 수집한다.
+      include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts', 'e2e/support/**/*.test.ts'],
       restoreMocks: true,
     },
   };

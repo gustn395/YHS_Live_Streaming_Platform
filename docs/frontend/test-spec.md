@@ -47,26 +47,31 @@
 | FE-T037 | 재발송·남은 시간·동시성 | 재발송 가능 시각 전에는 버튼 비활성과 남은 초(1초마다 갱신), 지나면 활성. 발급 시각을 모르는 진입(Google·state 없음)은 바로 활성이고 남은 시간 미표시. OTP 남은 시간 분:초(125초 → 2:05), 지나면 만료 안내. 재발송 성공 → 새 만료 시각·60초 대기·입력 비움·화면 기록(history state) 갱신, Challenge 없음 → 다시 시작, 429는 재발송만 차단. 확인과 재발송은 동시에 나가지 않음. 화면을 떠나면 타이머 0개·진행 중 결과 미반영. 확인 429 동안 재발송은 그대로 가능. 공용 대기 모듈: `Retry-After` 초 → 분 올림, 마감 시각에 한 번만 알림, 지난 시각은 즉시, 2^31-1ms를 넘는 대기 분할, 취소, tick 간격 | FE-D035, FE-D040 (3) | `OtpForm.test.tsx`(재발송과 남은 시간), `deadline.test.ts`, `LoginPage.test.tsx`(재발송 화면 기록) |
 | FE-T038 | Google 시작·오류 안내 | 로그인 화면에 `/api/v1/auth/oauth2/authorization/google`로 가는 링크(문서 이동). `?error=` 6개 코드는 서로 다른 고정 문구, 알 수 없는 값(빈 값·대문자·HTML·뒤 공백 포함)은 일반 문구이며 받은 값을 화면에 그리지 않는다. `rate_limited`는 대기 시간을 말하지 않는다. 표시 뒤 쿼리에서 `error`만 replace로 지우고(`from` 유지) 문구는 남긴다 | FE-D038 | `googleLoginError.test.ts`, `LoginPage.test.tsx`(Google 오류 안내) |
 | FE-T039 | 로그인·OTP 경로 | `/login`·`/login/otp`는 공개 경로이고 준비 중 Placeholder가 없다. 가드 → `/login?from=` → 로그인 → OTP → 원래 화면, 인증 상태 `authenticated`. 로그인 화면에 가입 링크, 세션 상실 안내 유지 | FE-D012, FE-D036 | `LoginPage.test.tsx`, `router.test.tsx`, `SignupPage.test.tsx`(가입 경로) |
+| FE-T040 | HIBP 스텁 계약(CI E2E) | Backend HibpPwnedPasswordsClient와 같은 `GET /range/{대문자 16진수 5자}` + `Add-Padding: true` + `User-Agent: yhs-live-streaming-backend`에만 200과 건수 0인 패딩 줄(Backend 정규식 `[0-9A-Fa-f]{35}:\d+`에 맞음, "유출 없음")을 준다. 소문자·길이·16진수 아님·쿼리·헤더 누락·다른 값·GET 아님은 400, 다른 경로는 404이고 unexpected로 센다. `/healthz`는 200이고 정상 호출로 세지 않는다. 통계(`ok`·`unexpected`·`health`)는 기동 때 0으로 초기화하고 요청마다 원자적으로 다시 써서 서버가 떠 있는 동안에도 최신이다. 127.0.0.1에만 바인드하고 포트가 쓰이고 있으면 실패한다. 실제 HIBP로 대신 요청하지 않는다 | FE-D044 (4), fe06 Q5 | `e2e/support/hibpStub.test.ts` |
+| FE-T041 | E2E CI | E2E 대상 변경(fe06 3장)이 있으면 `e2e-ci` Workflow가 서버를 띄워 PR은 `@slow`를 뺀 E2E(01·02), main push·수동 실행은 전체(01~03)를 실행한다. 실행 전 목록으로 필수 집합을 만들고 0건·skipped·flaky·unexpected·필수 누락·범위 밖 실행이면 실패, 스텁 정상 호출이 실행 수보다 적거나 예상 밖 요청이 있으면 실패, 하나라도 실패하면 Gate `e2e-ci`가 FAILED다. 공개 로그에는 결과·집계 줄과 거른 제한 로그만 남고 Artifact가 없다. 실패하면 Step Summary에 첫 실패 단계(고정 이름)를 남긴다. GitHub 실행 검증은 fe06 Q15 범위(L3 구현 PR, L4 main push)이고 나머지는 FE-U12 | FE-D044, fe06 Q1~Q13·Q15 | `.github/ci/tests/`(감지·Gate·결과 검증·로그 필터·스텁 검증·실패 단계), `.github/workflows/e2e-ci.yml` |
 | M-02 | 회원가입 실제 Backend 수동 확인 | 개발 서버 + 실제 Backend로 Chrome에서 확인한다: 가입 성공과 완료 화면, `XSRF-TOKEN` 쿠키와 `X-XSRF-TOKEN` 헤더, CSRF 403 복구(Console에서 `path=/signup`인 가짜 `XSRF-TOKEN` 쿠키를 더해 403 유도 → 그 쿠키만 지움 → 다시 제출해 `/csrf` 재확보 뒤 성공. DevTools Override headers는 요청 헤더를 바꾸지 못해 쓰지 않는다), 400·409 필드 표시, 폭 320px에서 가로 스크롤 없음, 글자 대비, 다크 모드. Safari는 확인하지 않았으면 미확인으로 적는다. 실행은 별도 승인 | FE-D029 | 수동 |
 | M-01 | XSRF 실제 브라우저 수동 확인 | 개발 서버에서 `XSRF-TOKEN` 쿠키를 둔 채 Client GET 요청을 보내 Network 탭에 `X-XSRF-TOKEN` 헤더가 없음을 확인한다(상태 변경 요청의 부착은 M-02). 자동 결과와 구분해 기록하고, 하지 않았으면 PASS로 적지 않는다. 운영 빌드에서는 확인할 수 없다는 한계를 함께 적는다 | FE-D014 | 수동 |
-| E2E-01 | 일반 로그인 성공(`@smoke`) | 새 계정 → `/app` 접근 → `/login?from=%2Fapp` → 로그인 → Mailpit OTP → 확인: `/app` 도착, OTP 확인 요청에 `X-XSRF-TOKEN`, `__Host-yhs_at` 쿠키 HttpOnly·Secure·SameSite=Strict·Path=/ | FE-D034~FE-D037, FE-D039 | `e2e/login.spec.ts` (E2E, 아래 3장 절차) |
-| E2E-02 | OTP 오입력 뒤 성공 | 정답과 다른 4자리 → 일치하지 않음 안내·입력 비움 → 정답으로 `/app` | FE-D037, FE-D039 | `e2e/login.spec.ts` (E2E) |
-| E2E-03 | 재발송·이전 OTP 무효 | 첫 OTP 수신 → 재발송 버튼이 켜질 때까지 대기(약 60초) → 재발송 → 새 메일만 읽음 → 두 번호가 다름 → 이전 번호는 일치하지 않음 안내 → 새 번호로 `/app` | FE-D035, FE-D039, MB-D015 | `e2e/login.spec.ts` (E2E) |
+| E2E-01 | 일반 로그인 성공(`@smoke`) | 새 계정 → `/app` 접근 → `/login?from=%2Fapp` → 로그인 → Mailpit OTP → 확인: `/app` 도착, OTP 확인 요청에 `X-XSRF-TOKEN`, `__Host-yhs_at` 쿠키 HttpOnly·Secure·SameSite=Strict·Path=/ | FE-D034~FE-D037, FE-D039, FE-D044 | `e2e/login.spec.ts` (E2E, 아래 3장 절차, CI는 PR·main push·수동) |
+| E2E-02 | OTP 오입력 뒤 성공 | 정답과 다른 4자리 → 일치하지 않음 안내·입력 비움 → 정답으로 `/app` | FE-D037, FE-D039, FE-D044 | `e2e/login.spec.ts` (E2E, CI는 PR·main push·수동) |
+| E2E-03 | 재발송·이전 OTP 무효(`@slow`) | 첫 OTP 수신 → 재발송 버튼이 켜질 때까지 대기(약 60초) → 재발송 → 새 메일만 읽음 → 두 번호가 다름 → 이전 번호는 일치하지 않음 안내 → 새 번호로 `/app` | FE-D035, FE-D039, FE-D044, MB-D015 | `e2e/login.spec.ts` (E2E, CI는 main push·수동만) |
 | E2E-ENV | E2E 환경 격리·반복 | 3장 절차를 `down -v`를 사이에 두고 2회 실행해 2회 모두 통과하고, 끝난 뒤 `yhs-e2e` 프로젝트 컨테이너·볼륨이 0개. 환경변수가 없거나 서버가 없으면 globalSetup이 이유를 밝히고 멈춘다 | FE-D039 | 절차 확인(E2E) |
 | M-03 | 로그인·OTP 실제 브라우저 수동 확인 | Chrome: 실제 Google 로그인(실제 Google OAuth 클라이언트가 필요해 사용자가 판단, 없으면 미실행) → OTP 화면 진입·성공, Backend 302 `/login?error=` 실제 안내, 폭 320px 가로 스크롤 없음·다크 모드·대비, 인증 쿠키 속성. Safari는 확인하지 않았으면 미확인으로 적는다. 실행은 별도 승인 | FE-D029, FE-D038 | 수동 |
 
 ## 2. 집계
 
-- 요구사항 39건(FE-T001~FE-T039, FE-T018의 GitHub 실행 검증은 PR 이후) + E2E 4건(E2E-01~03, E2E-ENV) + 수동 3건(M-01~M-03).
-  Vitest 32파일 552건(shared/api 135, shared/time 8, features/auth 97, features/login 44, features/otp 64, features/signup 133, app 32,
-  src/test 25, scripts 14). E2E는 Playwright 3건이고 CI에서 실행하지 않는다([FE-U11](decisions.md#2-미결)).
+- 요구사항 41건(FE-T001~FE-T041, FE-T018·FE-T041의 GitHub 실행 검증은 PR 이후) + E2E 4건(E2E-01~03, E2E-ENV) + 수동 3건(M-01~M-03).
+  Vitest 33파일 569건(shared/api 135, shared/time 8, features/auth 97, features/login 44, features/otp 64, features/signup 133, app 32,
+  src/test 25, scripts 14, e2e/support 17). E2E는 Playwright 3건이고 CI 실행 범위는 [FE-D044](decisions.md#1-확정-결정) (2)다.
+  CI 스크립트 unittest(`.github/ci/tests/`)는 [fe06-e2e-ci.md](../testing/fe06-e2e-ci.md) 4장 L1·L2다.
   FE-T001은 명령 실행으로 검증한다. 실행 결과는 [regression-log.md](regression-log.md).
 
 ## 3. E2E 실행 절차 (FE-D039, FE-D040)
 
-로컬 전용이다. Windows PowerShell 기준이며, 저장소 루트에서 실행한다. 비밀 값은 어디에도 적지 않는다(이 문서·regression-log 포함).
+로컬 절차다(CI 절차는 [fe06-e2e-ci.md](../testing/fe06-e2e-ci.md) 2장). Windows PowerShell 기준이며, 저장소 루트에서 실행한다. 비밀 값은
+어디에도 적지 않는다(이 문서·regression-log 포함). OTP·재발송 관련 코드를 바꾼 작업은 Merge 전에 Full을 한 번 실행하고 결과를
+regression-log에 적는다(CI 수동 실행 결과도 인정, [FE-D044](decisions.md#1-확정-결정) (3)).
 
-1. 준비: Docker, Java 17(Backend toolchain), Node 24, 인터넷(가입 때 Backend가 HIBP를 호출한다). 브라우저는 한 번만
+1. 준비: Docker, Java 17(Backend toolchain), Node 24, 인터넷(가입 때 Backend가 HIBP를 호출한다. 기본은 실제 HIBP이고, 선택으로 8번의 스텁을 쓸 수 있다). 브라우저는 한 번만
    `npm --prefix frontend exec playwright install chromium`(저장소 밖 사용자 캐시).
 2. 환경변수(새 PowerShell 창, 실행할 때마다 새로 만든다): `E2E_POSTGRES_PASSWORD`와 Backend 키 3종(`AUTH_JWT_KEY`, `MEMBER_OTP_HMAC_KEY`,
    `MEMBER_PASSWORD_PEPPER_KEY`, 서로 다른 값)은 아래처럼 256bit 난수를 Base64로 만든다. 키 ID(`*_KEY_ID`)는 아무 식별자(예: `e2e`).
@@ -82,7 +87,7 @@
    `$env:FRONTEND_API_PROXY_TARGET='http://127.0.0.1:18080'; npm --prefix frontend run dev`. DB를 다시 초기화하면 Backend도 다시 기동한다.
 5. 실행: `$env:E2E_BASE_URL='http://localhost:5173'; $env:E2E_MAILPIT_URL='http://127.0.0.1:18025'`, 그다음 범위별로
    - Smoke: `npm --prefix frontend run e2e:smoke`(E2E-01)
-   - 기본: `npm --prefix frontend run e2e -- --grep "E2E-0[12]"`(E2E-01·02)
+   - 기본: `npm --prefix frontend run e2e -- --grep "E2E-0[12]"`(E2E-01·02. CI의 PR 범위 `-- --grep-invert @slow`와 같은 테스트)
    - Full: `npm --prefix frontend run e2e`(E2E-01~03, 재발송 대기로 약 2분). **Commit 전 필수 범위는 Full 1회**다.
    workers 1·재시도 없음이고, 테스트마다 새 계정을 만들어 회원별 OTP 제한과 Mailpit 수신함이 섞이지 않는다. 한 실행에서 쓰는 요청은 가입 3·로그인 3·
    OTP 확인·재발송 7회 안팎으로 IP 제한(수치 원본: member [MB-D018](../member/decisions.md#1-확정-결정)·[MB-D027](../member/decisions.md#1-확정-결정)) 안이다. 같은 환경에서 다시 돌릴 때는 3번부터 한다.
@@ -91,3 +96,8 @@
    HTML 리포트는 만들지 않는다.
 7. 종료: Frontend·Backend를 끄고 3번과 같은 `down -v`. `docker ps -a --filter label=com.docker.compose.project=yhs-e2e`와
    `docker volume ls --filter label=com.docker.compose.project=yhs-e2e`가 비었는지 확인한다(E2E-ENV).
+8. 선택: HIBP 스텁(FE-T040). 실제 HIBP 대신 CI와 같은 스텁으로 돌릴 때만 쓴다. 이 실행은 실제 HIBP 연동 확인을 대신하지 않는다.
+   4번 Backend 기동 **전에** 새 창에서 `$env:HIBP_STUB_PORT='18099'; $env:HIBP_STUB_STATS_FILE="$env:TEMP\yhs-e2e-hibp-stats.json";
+   node frontend/e2e/support/hibpStub.ts`를 띄우고, Backend 창에 `$env:MEMBER_PASSWORD_HIBP_BASE_URL='http://127.0.0.1:18099'`를 더한다.
+   실행 뒤 통계 파일의 `ok`가 실행한 테스트 수 이상이고 `unexpected`가 0인지 확인하고(`python -I .github/ci/hibp_stub_check.py
+   --stats-file <파일> --min-ok <테스트 수>`), 스텁 창을 닫고 통계 파일을 지운다.

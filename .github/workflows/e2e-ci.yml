@@ -1,0 +1,454 @@
+# E2E CI: 변경 감지 → (E2E 대상이면) PostgreSQL·Redis·Mailpit·HIBP 스텁·Backend·Frontend preview 기동 → Playwright → 최종 Gate
+# 정책과 검증 기록: docs/testing/fe06-e2e-ci.md(Q1~Q14), docs/frontend/decisions.md FE-D044, test-spec FE-T041
+#
+# - 실행 범위: PR은 @slow 제외(E2E-01·02), main push·수동 실행은 전체(E2E-01~03). 필수 테스트 집합은 실행 전 목록으로 계산한다.
+# - Gate e2e-ci는 처음에 Ruleset 필수 체크가 아니다(전환은 FE-U12, 사용자가 Settings에서 한다).
+# - 비밀 값은 실행마다 새로 만들고 곧바로 마스킹한 뒤 GITHUB_ENV로만 넘긴다. Repository Secret·운영 비밀을 쓰지 않는다.
+#   값·환경변수 전체를 출력하지 않고 set -x를 쓰지 않는다.
+# - Artifact를 올리지 않는다(FE-D044 (5)). 실패 진단은 log_filter.py로 거른 제한 로그와 Step Summary만 남긴다.
+# - Action은 커밋 SHA로 고정한다(기존 Backend·Frontend CI와 같은 SHA). PR에서 온 값은 action 입력·env로만 넘긴다.
+name: E2E CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # PR은 같은 PR의 이전 실행만 취소한다. main push·수동 실행은 실행마다 고유 그룹이라 취소·대체되지 않는다(fe06 Q7).
+  group: ${{ github.event_name == 'pull_request' && format('e2e-ci-pr-{0}', github.event.pull_request.number) || format('e2e-ci-run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    name: e2e-changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.detect.outputs.backend }}
+      frontend: ${{ steps.detect.outputs.frontend }}
+      e2e: ${{ steps.detect.outputs.e2e }}
+      mode: ${{ steps.detect.outputs.mode }}
+      reason: ${{ steps.detect.outputs.reason }}
+    steps:
+      - name: Checkout (full history for merge-base)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect changes
+        id: detect
+        uses: ./.github/actions/detect-changes
+        with:
+          base-sha: ${{ github.event.pull_request.base.sha }}
+          head-sha: ${{ github.event.pull_request.head.sha }}
+
+  e2e:
+    name: e2e-run
+    needs: changes
+    if: ${{ needs.changes.outputs.e2e == 'run' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      # 비밀이 아닌 고정 설정(로컬 절차 test-spec 3장과 같은 비표준 포트, 모두 loopback)
+      E2E_SCOPE: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}
+      COMPOSE_PROJECT: yhs-e2e
+      COMPOSE_FILE_PATH: infrastructure/docker/e2e/compose.yml
+      SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:15432/yhs
+      SPRING_DATASOURCE_USERNAME: yhs
+      SPRING_DATA_REDIS_HOST: 127.0.0.1
+      SPRING_DATA_REDIS_PORT: '16379'
+      SPRING_MAIL_HOST: 127.0.0.1
+      SPRING_MAIL_PORT: '11025'
+      MEMBER_SMTP_AUTH: 'false'
+      MEMBER_SMTP_STARTTLS: 'false'
+      MEMBER_OTP_MAIL_FROM: no-reply@e2e.test
+      MEMBER_OAUTH_PUBLIC_BASE_URL: http://localhost:4173
+      BACKEND_PORT: '18080'
+      SERVER_ADDRESS: 127.0.0.1
+      AUTH_JWT_KEY_ID: e2e-ci
+      MEMBER_OTP_HMAC_KEY_ID: e2e-ci
+      MEMBER_PASSWORD_PEPPER_KEY_ID: e2e-ci
+      GOOGLE_CLIENT_ID: e2e-ci-dummy
+      MEMBER_PASSWORD_HIBP_BASE_URL: http://127.0.0.1:18099
+      HIBP_STUB_PORT: '18099'
+      FRONTEND_API_PROXY_TARGET: http://127.0.0.1:18080
+      E2E_BASE_URL: http://localhost:4173
+      E2E_MAILPIT_URL: http://127.0.0.1:18025
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare work directory
+        id: prepare
+        timeout-minutes: 1
+        run: |
+          work="$RUNNER_TEMP/e2e"
+          mkdir -p "$work"
+          {
+            echo "E2E_WORK=$work"
+            echo "HIBP_STUB_STATS_FILE=$work/hibp-stats.json"
+          } >> "$GITHUB_ENV"
+
+      - name: Generate run-scoped secrets (masked)
+        id: secrets
+        timeout-minutes: 1
+        run: |
+          # 값은 출력하지 않는다. add-mask를 먼저 등록한 뒤 GITHUB_ENV에만 쓴다.
+          for name in AUTH_JWT_KEY MEMBER_OTP_HMAC_KEY MEMBER_PASSWORD_PEPPER_KEY; do
+            value="$(openssl rand -base64 32)"
+            echo "::add-mask::${value}"
+            echo "${name}=${value}" >> "$GITHUB_ENV"
+          done
+          db="$(openssl rand -hex 24)"
+          echo "::add-mask::${db}"
+          { echo "E2E_POSTGRES_PASSWORD=${db}"; echo "SPRING_DATASOURCE_PASSWORD=${db}"; } >> "$GITHUB_ENV"
+          google="$(openssl rand -hex 24)"
+          echo "::add-mask::${google}"
+          echo "GOOGLE_CLIENT_SECRET=${google}" >> "$GITHUB_ENV"
+          echo "run-scoped secrets generated (5 values, masked)"
+
+      - name: Set up JDK 17 (Temurin)
+        id: java
+        timeout-minutes: 3
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        id: gradle
+        timeout-minutes: 3
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-provider: basic
+          validate-wrappers: true
+
+      - name: Set up Node (.nvmrc)
+        id: node
+        timeout-minutes: 3
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          package-manager-cache: false
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install (npm ci)
+        id: npm-ci
+        timeout-minutes: 3
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium
+        id: chromium
+        timeout-minutes: 5
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Start PostgreSQL·Redis·Mailpit (compose)
+        id: compose
+        timeout-minutes: 3
+        run: |
+          docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE_PATH" down -v --remove-orphans
+          # Step 제한 3분 안에서 down·오류 처리 시간을 남긴다
+          docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE_PATH" up -d --wait --wait-timeout 140
+
+      - name: Build executable WAR (bootWar)
+        id: bootwar
+        timeout-minutes: 6
+        working-directory: backend
+        run: ./gradlew :app:bootWar --stacktrace
+
+      - name: Select executable WAR (exactly one, plain excluded)
+        id: select-war
+        timeout-minutes: 1
+        run: |
+          shopt -s nullglob
+          wars=()
+          for f in backend/app/build/libs/*.war; do
+            [[ "$f" == *-plain.war ]] || wars+=("$f")
+          done
+          if [ "${#wars[@]}" -ne 1 ]; then
+            echo "::error title=E2E::실행 WAR가 정확히 1개가 아니다(${#wars[@]}개)"
+            exit 1
+          fi
+          echo "BACKEND_WAR=$GITHUB_WORKSPACE/${wars[0]}" >> "$GITHUB_ENV"
+
+      - name: Start HIBP stub
+        id: stub
+        timeout-minutes: 1
+        run: |
+          nohup node frontend/e2e/support/hibpStub.ts > "$E2E_WORK/hibp-stub.log" 2>&1 &
+          echo $! > "$E2E_WORK/hibp-stub.pid"
+          # 마감 40초 + 마지막 반복(curl 2초·sleep 1초)으로 최대 약 43초. Step 제한 1분 안에서 오류 처리 여유를 남긴다.
+          SECONDS=0
+          while [ "$SECONDS" -lt 40 ]; do
+            if ! kill -0 "$(cat "$E2E_WORK/hibp-stub.pid")" 2>/dev/null; then
+              echo "::error title=E2E::HIBP 스텁이 기동 중 종료됐다"
+              exit 1
+            fi
+            [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://127.0.0.1:${HIBP_STUB_PORT}/healthz" || true)" = "200" ] && exit 0
+            sleep 1
+          done
+          echo "::error title=E2E::HIBP 스텁 기동 시간 초과"
+          exit 1
+
+      - name: Start Backend
+        id: backend
+        timeout-minutes: 3
+        run: |
+          nohup java -jar "$BACKEND_WAR" > "$E2E_WORK/backend.log" 2>&1 &
+          echo $! > "$E2E_WORK/backend.pid"
+          # 마감 150초 + 마지막 반복(curl 2초·sleep 2초)으로 최대 약 154초. Step 제한 3분 안에서 오류 처리 여유를 남긴다.
+          SECONDS=0
+          while [ "$SECONDS" -lt 150 ]; do
+            if ! kill -0 "$(cat "$E2E_WORK/backend.pid")" 2>/dev/null; then
+              echo "::error title=E2E::Backend 프로세스가 기동 중 종료됐다"
+              exit 1
+            fi
+            [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://127.0.0.1:${BACKEND_PORT}/actuator/health" || true)" = "200" ] && exit 0
+            sleep 2
+          done
+          echo "::error title=E2E::Backend 기동 시간 초과(/actuator/health)"
+          exit 1
+
+      - name: Build Frontend (checkDist)
+        id: build
+        timeout-minutes: 3
+        working-directory: frontend
+        run: npm run build
+
+      - name: Start Frontend preview
+        id: preview
+        timeout-minutes: 1
+        working-directory: frontend
+        run: |
+          # vite를 직접 실행해 프로세스를 하나로 둔다(PID로 종료). 포트가 쓰이고 있으면 다른 포트로 바꾸지 않고 실패한다.
+          nohup node node_modules/vite/bin/vite.js preview --host localhost --port 4173 --strictPort > "$E2E_WORK/preview.log" 2>&1 &
+          echo $! > "$E2E_WORK/preview.pid"
+          # 마감 40초 + 마지막 반복(curl 2회 각 2초·sleep 1초)으로 최대 약 45초. Step 제한 1분 안에서 오류 처리 여유를 남긴다.
+          SECONDS=0
+          while [ "$SECONDS" -lt 40 ]; do
+            if ! kill -0 "$(cat "$E2E_WORK/preview.pid")" 2>/dev/null; then
+              echo "::error title=E2E::preview가 기동 중 종료됐다"
+              exit 1
+            fi
+            root="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$E2E_BASE_URL/" || true)"
+            csrf="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$E2E_BASE_URL/api/v1/auth/csrf" || true)"
+            if [ "$root" = "200" ] && [ "$csrf" = "204" ]; then
+              echo "preview 200, API 프록시(/api/v1/auth/csrf) 204"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error title=E2E::preview 또는 API 프록시 기동 시간 초과"
+          exit 1
+
+      - name: Check loopback-only listeners
+        id: loopback
+        timeout-minutes: 1
+        run: |
+          for port in 4173 18099; do
+            addrs="$(ss -ltnH "sport = :${port}" | awk '{print $4}')"
+            if [ -z "$addrs" ]; then
+              echo "::error title=E2E::${port} 포트가 열려 있지 않다"
+              exit 1
+            fi
+            while read -r addr; do
+              case "$addr" in
+                127.0.0.1:*|\[::1\]:*) ;;
+                *) echo "::error title=E2E::${port} 포트가 loopback 밖에 열려 있다"; exit 1 ;;
+              esac
+            done <<< "$addrs"
+          done
+          echo "4173·18099 loopback 전용 확인"
+
+      - name: List tests (required set)
+        id: list
+        timeout-minutes: 1
+        working-directory: frontend
+        run: npx playwright test --list --reporter=json > "$E2E_WORK/pw-list.json"
+
+      - name: Run Playwright (${{ github.event_name == 'pull_request' && 'PR, @slow 제외' || 'FULL' }})
+        id: playwright
+        timeout-minutes: ${{ github.event_name == 'pull_request' && 5 || 10 }}
+        working-directory: frontend
+        run: |
+          args=()
+          if [ "$E2E_SCOPE" = "pr" ]; then args+=(--grep-invert @slow); fi
+          set +e
+          PLAYWRIGHT_JSON_OUTPUT_FILE="$E2E_WORK/pw-result.json" npx playwright test "${args[@]}" --reporter=list,json \
+            > "$E2E_WORK/pw-output.log" 2>&1
+          code=$?
+          set -e
+          # list 출력은 결과·집계 줄만 공개하고 오류 원문(단언 실제값·호출 로그)은 가린다(fe06 Q10)
+          python3 -B -I "$GITHUB_WORKSPACE/.github/ci/log_filter.py" --kind playwright --tail 400 "$E2E_WORK/pw-output.log"
+          echo "playwright exit=${code}"
+          exit "$code"
+
+      - name: Verify E2E result (count·scope)
+        id: report
+        if: ${{ !cancelled() }}
+        timeout-minutes: 1
+        run: |
+          python3 -B -I "$GITHUB_WORKSPACE/.github/ci/e2e_report.py" --scope "$E2E_SCOPE" \
+            --list-file "$E2E_WORK/pw-list.json" --result-file "$E2E_WORK/pw-result.json"
+
+      - name: Verify HIBP stub calls
+        id: stub-check
+        if: ${{ success() }}
+        timeout-minutes: 1
+        env:
+          MIN_OK: ${{ steps.report.outputs.executed }}
+        run: |
+          python3 -B -I "$GITHUB_WORKSPACE/.github/ci/hibp_stub_check.py" --stats-file "$HIBP_STUB_STATS_FILE" --min-ok "$MIN_OK"
+
+      - name: Failure diagnostics (filtered)
+        if: ${{ failure() }}
+        timeout-minutes: 2
+        env:
+          # 실행 순서대로 `<step id>=<outcome>`(고정 토큰). failed_step.py가 첫 실패 단계만 Step Summary에 적는다(fe06 Q10).
+          STEP_OUTCOMES: >-
+            prepare=${{ steps.prepare.outcome }} secrets=${{ steps.secrets.outcome }}
+            java=${{ steps.java.outcome }} gradle=${{ steps.gradle.outcome }} node=${{ steps.node.outcome }}
+            npm-ci=${{ steps.npm-ci.outcome }} chromium=${{ steps.chromium.outcome }} compose=${{ steps.compose.outcome }}
+            bootwar=${{ steps.bootwar.outcome }} select-war=${{ steps.select-war.outcome }} stub=${{ steps.stub.outcome }}
+            backend=${{ steps.backend.outcome }} build=${{ steps.build.outcome }} preview=${{ steps.preview.outcome }}
+            loopback=${{ steps.loopback.outcome }} list=${{ steps.list.outcome }} playwright=${{ steps.playwright.outcome }}
+            report=${{ steps.report.outcome }} stub-check=${{ steps.stub-check.outcome }}
+        run: |
+          set +e
+          python3 -B -I "$GITHUB_WORKSPACE/.github/ci/failed_step.py"
+          echo "실패 진단: 값을 거른 제한 로그만 출력한다(Mailpit 로그·환경변수는 출력하지 않는다)"
+          # compose 파일의 비밀번호 변수는 기본값이 없다. 비밀 생성 전에 실패해도 상태·로그를 볼 수 있게 ps·logs에만 임시 값을 준다
+          # (실제 DB 인증·compose up·Backend 기동에는 쓰지 않는다).
+          E2E_POSTGRES_PASSWORD="${E2E_POSTGRES_PASSWORD:-cleanup-only}" \
+            docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE_PATH" ps --format 'table {{.Service}}\t{{.State}}\t{{.Health}}'
+          for name in hibp-stub backend preview; do
+            pid_file="${E2E_WORK:-}/${name}.pid"
+            if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then echo "${name}: running"; else echo "${name}: not running"; fi
+          done
+          python3 -B -I "$GITHUB_WORKSPACE/.github/ci/log_filter.py" --kind spring --tail 200 "${E2E_WORK:-}/backend.log"
+          E2E_POSTGRES_PASSWORD="${E2E_POSTGRES_PASSWORD:-cleanup-only}" \
+            docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE_PATH" logs --no-color --tail 50 postgres redis 2>&1 \
+            | python3 -B -I "$GITHUB_WORKSPACE/.github/ci/log_filter.py" --kind compose --tail 100 -
+          exit 0
+
+      - name: Cleanup (always, non-blocking)
+        if: ${{ always() }}
+        timeout-minutes: 3
+        run: |
+          # 명령마다 결과를 모으고 일부가 실패해도 나머지를 계속한다. 실패는 warning과 Step Summary에 남긴다(fe06 Q11).
+          set +e
+          work="${E2E_WORK:-$RUNNER_TEMP/e2e}"
+          failed=()
+          stop_pid() {
+            local file="$work/$1.pid" pid
+            [ -f "$file" ] || return 0
+            pid="$(cat "$file")"
+            kill -0 "$pid" 2>/dev/null || return 0
+            kill "$pid"
+            for _ in $(seq 1 10); do kill -0 "$pid" 2>/dev/null || return 0; sleep 1; done
+            kill -9 "$pid"
+            sleep 1
+            ! kill -0 "$pid" 2>/dev/null
+          }
+          for name in preview backend hibp-stub; do
+            stop_pid "$name" || failed+=("${name} 종료")
+          done
+          # down 전에 이 프로젝트 컨테이너가 쓰는 Docker 볼륨 이름을 모은다(bind mount 제외). 익명 볼륨에는 프로젝트 라벨이
+          # 없을 수 있어 라벨 검사만으로는 잔존을 확인하지 못할 수 있다(fe06 Q11). 조회 실패는 성공으로 보지 않는다.
+          label="label=com.docker.compose.project=${COMPOSE_PROJECT}"
+          volumes=()
+          if cids="$(docker ps -aq --filter "$label")"; then
+            if [ -n "$cids" ]; then
+              # shellcheck disable=SC2086 # 컨테이너 ID 목록을 인자로 나눈다
+              if names="$(docker inspect --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{"\n"}}{{end}}{{end}}' $cids)"; then
+                while read -r v; do [ -n "$v" ] && volumes+=("$v"); done <<< "$names"
+              else
+                failed+=("볼륨 이름 조회 실패")
+              fi
+            fi
+          else
+            failed+=("컨테이너 조회 실패")
+          fi
+          # compose 파일의 비밀번호 변수는 기본값이 없다. 비밀 생성 전에 실패한 실행도 정리할 수 있게 down에만 임시 값을 준다
+          # (실제 DB 인증·compose up·Backend 기동에는 쓰지 않는다).
+          E2E_POSTGRES_PASSWORD="${E2E_POSTGRES_PASSWORD:-cleanup-only}" \
+            docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE_PATH" down -v --remove-orphans --timeout 20 \
+            || failed+=("compose down")
+          if left="$(docker ps -aq --filter "$label")"; then
+            [ -z "$left" ] || failed+=("컨테이너 남음")
+          else
+            failed+=("컨테이너 잔존 조회 실패")
+          fi
+          if all_volumes="$(docker volume ls -q)" && labeled="$(docker volume ls -q --filter "$label")"; then
+            [ -z "$labeled" ] || failed+=("라벨 볼륨 남음")
+            for v in "${volumes[@]}"; do
+              grep -qxF -- "$v" <<< "$all_volumes" && failed+=("볼륨 남음")
+            done
+          else
+            failed+=("볼륨 잔존 조회 실패")
+          fi
+          echo "cleanup: 확인한 볼륨 ${#volumes[@]}개(이 프로젝트 컨테이너의 Docker 볼륨)"
+          for port in 4173 18080 18099; do
+            [ -z "$(ss -ltnH "sport = :${port}")" ] || failed+=("포트 ${port} 열림")
+          done
+          pw_tmp="$(node -p "require('node:path').join(require('node:os').tmpdir(), 'yhs-e2e')" 2>/dev/null)"
+          rm -rf "$work" ${pw_tmp:+"$pw_tmp"} || failed+=("임시 파일 삭제")
+          {
+            echo "### E2E Cleanup"
+            echo
+            if [ "${#failed[@]}" -eq 0 ]; then
+              echo "| 결과 | ok |"
+              echo "| --- | --- |"
+            else
+              echo "| 결과 | warning |"
+              echo "| --- | --- |"
+              for item in "${failed[@]}"; do echo "| 실패 | ${item} |"; done
+              echo
+              echo "Cleanup warning이 난 실행은 필수 체크 전환 안정화 횟수에 넣지 않는다(fe06 Q14)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${#failed[@]}" -eq 0 ]; then
+            echo "cleanup: ok"
+          else
+            echo "::warning title=E2E Cleanup::정리 일부 실패: ${failed[*]}"
+          fi
+          exit 0
+
+  gate:
+    # Gate 이름(e2e-ci). 처음에는 Ruleset 필수 체크가 아니다(FE-U12). 바꾸면 fe06-e2e-ci.md도 함께 바꾼다.
+    # always(): 감지·E2E가 실패·취소돼도 Gate가 실행돼 FAILED를 남긴다(건너뛴 체크는 통과로 취급되기 때문).
+    name: e2e-ci
+    needs: [changes, e2e]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (.github only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github
+
+      - name: Gate
+        uses: ./.github/actions/ci-gate
+        with:
+          area: e2e
+          changes-result: ${{ needs.changes.result }}
+          backend-target: ${{ needs.changes.outputs.backend }}
+          frontend-target: ${{ needs.changes.outputs.frontend }}
+          e2e-target: ${{ needs.changes.outputs.e2e }}
+          mode: ${{ needs.changes.outputs.mode }}
+          reason: ${{ needs.changes.outputs.reason }}
+          build-result: ${{ needs.e2e.result }}

@@ -1,11 +1,12 @@
-# CI 최종 Gate: BE·FE 양쪽 감지 출력의 조합을 확인한 뒤 자기 영역의 build 결과를 판정한다.
-# 정책: docs/testing/fe02-ci-split.md (Gate 판정표). 값은 env로만 넘긴다.
+# CI 최종 Gate: BE·FE·E2E 감지 출력의 조합을 확인한 뒤 자기 영역의 build(E2E는 실행 Job) 결과를 판정한다.
+# 정책: docs/testing/fe02-ci-split.md (Gate 판정표), E2E 영역은 docs/testing/fe06-e2e-ci.md. 값은 env로만 넘긴다.
+# composite action은 required 입력이 빠져도 빈 값으로 실행되므로, 빈 값·허용 밖 값은 gate.py가 FAILED로 판정한다.
 name: CI gate
 description: 변경 감지 출력과 build 결과로 NORMAL·SKIPPED·FALLBACK·FULL·FAILED를 판정한다
 
 inputs:
   area:
-    description: backend 또는 frontend
+    description: backend, frontend 또는 e2e
     required: true
   changes-result:
     description: needs.<changes>.result
@@ -15,6 +16,9 @@ inputs:
     required: true
   frontend-target:
     description: 감지 출력 frontend
+    required: true
+  e2e-target:
+    description: 감지 출력 e2e
     required: true
   mode:
     description: 감지 출력 mode
@@ -36,6 +40,7 @@ runs:
         CHANGES_RESULT: ${{ inputs.changes-result }}
         BACKEND_TARGET: ${{ inputs.backend-target }}
         FRONTEND_TARGET: ${{ inputs.frontend-target }}
+        E2E_TARGET: ${{ inputs.e2e-target }}
         DETECT_MODE: ${{ inputs.mode }}
         DETECT_REASON: ${{ inputs.reason }}
         BUILD_RESULT: ${{ inputs.build-result }}

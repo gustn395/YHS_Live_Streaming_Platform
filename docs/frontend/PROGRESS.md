@@ -9,7 +9,9 @@
 | FE-W01 | FE-01 React 공통 인증 기반(FE-01-1~8: 작업 환경, 공통 구조, API Client, 인증 상태, 공통 오류 처리, 라우팅, 테스트·검증, 문서·리뷰) | #11 | 완료(#14) |
 | FE-W02 | FE-02 Frontend CI 구축 및 Backend·Frontend CI 독립성 보장([fe02-ci-split.md](../testing/fe02-ci-split.md)) | #16 | 완료(#18) |
 | FE-W03 | FE-03 회원가입 화면 및 CSRF 토큰 연동(member MB-W12의 가입 부분) | #20 | 완료(#23) |
-| FE-W04 | FE-04 로그인·이메일 OTP 화면, Google 로그인 시작·오류 안내, 로컬 E2E(Playwright)(member MB-W12의 로그인 부분) | #26 | 진행 중(정책 FE-D034~FE-D042 기록, 화면·단위 테스트 구현, 자체 리뷰 반영, 로컬 E2E Full 3회 통과. M-03 미실행, 커밋 전) |
+| FE-W04 | FE-04 로그인·이메일 OTP 화면, Google 로그인 시작·오류 안내, 로컬 E2E(Playwright)(member MB-W12의 로그인 부분) | #26 | 완료(#29). M-03 미실행([regression-log.md](regression-log.md)) |
+
+| FE-W06 | FE-06 Playwright E2E GitHub Actions CI 연동([fe06-e2e-ci.md](../testing/fe06-e2e-ci.md), FE-D044). FE-05보다 먼저 진행 | #32 | 진행 중(구현·로컬 L1·L2·로컬 E2E 회귀·S6 반영 완료, L3·L4 전, 커밋 전) |
 
 - 연결: member [MB-W12](../member/PROGRESS.md#1-작업-상태)(React 인증 화면).
 
@@ -24,3 +26,8 @@ FE-W02의 GitHub Settings 작업이다. 사용자가 하며, 순서·절차는 [
 
 - Actions 허용 목록에 Frontend CI가 쓰는 Action 추가.
 - main Ruleset 필수 체크 전환(`backend-build` → Gate 2개)과 복구 기간의 일반 PR Merge 보류.
+
+FE-W06 뒤의 GitHub Settings 작업이다. 사용자가 하며, 전환 조건은 [fe06-e2e-ci.md](../testing/fe06-e2e-ci.md) 1장 Q14가 원본이다.
+FE-W06 완료와 FE-05 개발을 막지 않는다.
+
+- Gate `e2e-ci`의 main Ruleset 필수 체크 전환과 FE-06에서 이월한 원격 검증 — [FE-U12](decisions.md#2-미결).

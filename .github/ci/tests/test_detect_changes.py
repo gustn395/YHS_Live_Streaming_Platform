@@ -22,11 +22,31 @@ VALID_COMBOS = {
     ("run", "run", "FULL", "dispatch"),
 }
 
+# FE-06: e2e 출력을 더한 허용 조합(fe06-e2e-ci.md Q2·Q3). (backend, frontend, e2e, mode, reason)
+# 규칙: backend·frontend 중 하나라도 run이면 e2e도 run. e2e 전용 변경은 skip·skip·run.
+VALID_COMBOS_E2E = {
+    ("run", "run", "run", "NORMAL", "changed"),
+    ("run", "skip", "run", "NORMAL", "changed"),
+    ("skip", "run", "run", "NORMAL", "changed"),
+    ("skip", "skip", "run", "NORMAL", "changed"),
+    ("skip", "skip", "skip", "NORMAL", "docs_only"),
+    ("run", "run", "run", "FALLBACK", "git_error"),
+    ("run", "run", "run", "FALLBACK", "empty_diff"),
+    ("run", "run", "run", "FALLBACK", "invalid_input"),
+    ("run", "run", "run", "FALLBACK", "unknown_event"),
+    ("run", "run", "run", "FULL", "push_main"),
+    ("run", "run", "run", "FULL", "dispatch"),
+}
+
 MISSING_SHA = "deadbeef" * 5  # 형식은 맞지만 저장소에 없는 40자리 SHA
 
 
 def combo(result):
     return (result.backend, result.frontend, result.mode, result.reason)
+
+
+def combo_e2e(result):
+    return (result.backend, result.frontend, result.e2e, result.mode, result.reason)
 
 
 class ClassifyTest(unittest.TestCase):
@@ -72,6 +92,22 @@ class ClassifyTest(unittest.TestCase):
     def test_unclassified_is_both(self):
         for p in ("tools/ci-verify.txt", "README.MD", "notes/a.md", "backend", "frontendx/a.ts", "Makefile"):
             self.assertClass(p, "both")
+
+    def test_e2e_workflow_is_e2e_not_common(self):
+        self.assertClass(".github/workflows/e2e-ci.yml", "e2e")
+
+    def test_e2e_compose_tree_is_e2e(self):
+        for p in ("infrastructure/docker/e2e/compose.yml", "infrastructure/docker/e2e/README.md"):
+            self.assertClass(p, "e2e")
+
+    def test_other_infrastructure_stays_unclassified_both(self):
+        for p in ("infrastructure/docker/other/compose.yml", "infrastructure/docker/e2ex/a.yml",
+                  "infrastructure/docker/e2e"):
+            self.assertClass(p, "both")
+
+    def test_frontend_e2e_tree_stays_frontend(self):
+        for p in ("frontend/e2e/login.spec.ts", "frontend/e2e/support/hibpStub.ts", "frontend/playwright.config.ts"):
+            self.assertClass(p, "frontend")
 
     def test_unusual_characters_do_not_change_rules(self):
         self.assertClass("frontend/src/공백 있는 파일.ts", "frontend")
@@ -200,6 +236,59 @@ class DecideUnitTest(unittest.TestCase):
             self.assertIn(combo(r), VALID_COMBOS)
 
 
+class DecideE2eTest(unittest.TestCase):
+    """FE-06: e2e 출력(fe06-e2e-ci.md Q2). 기존 backend·frontend 판정은 DecideUnitTest가 그대로 확인한다."""
+
+    def diff(self, raw):
+        return dc.decide("pull_request", BASE, HEAD, run_git=FakeGit([(0, MB.encode() + b"\n", b""), (0, raw, b"")]))
+
+    def test_backend_change_runs_e2e(self):
+        self.assertEqual(combo_e2e(self.diff(b"backend/a.java\x00")), ("run", "skip", "run", "NORMAL", "changed"))
+
+    def test_frontend_change_runs_e2e(self):
+        self.assertEqual(combo_e2e(self.diff(b"frontend/a.ts\x00")), ("skip", "run", "run", "NORMAL", "changed"))
+
+    def test_frontend_e2e_change_runs_frontend_and_e2e(self):
+        self.assertEqual(combo_e2e(self.diff(b"frontend/e2e/login.spec.ts\x00")),
+                         ("skip", "run", "run", "NORMAL", "changed"))
+
+    def test_e2e_only_paths_run_only_e2e(self):
+        for raw in (b".github/workflows/e2e-ci.yml\x00", b"infrastructure/docker/e2e/compose.yml\x00",
+                    b".github/workflows/e2e-ci.yml\x00infrastructure/docker/e2e/compose.yml\x00docs/a.md\x00"):
+            self.assertEqual(combo_e2e(self.diff(raw)), ("skip", "skip", "run", "NORMAL", "changed"), raw)
+
+    def test_common_ci_code_runs_all(self):
+        self.assertEqual(combo_e2e(self.diff(b".github/ci/gate.py\x00")), ("run", "run", "run", "NORMAL", "changed"))
+
+    def test_unclassified_runs_all(self):
+        self.assertEqual(combo_e2e(self.diff(b"Makefile\x00")), ("run", "run", "run", "NORMAL", "changed"))
+
+    def test_docs_only_skips_e2e(self):
+        self.assertEqual(combo_e2e(self.diff(b"docs/a.md\x00README.md\x00")),
+                         ("skip", "skip", "skip", "NORMAL", "docs_only"))
+
+    def test_fallback_and_full_run_e2e(self):
+        cases = [dc.decide("push", "", "", run_git=FakeGit([])),
+                 dc.decide("workflow_dispatch", "", "", run_git=FakeGit([])),
+                 dc.decide("x", "", "", run_git=FakeGit([])),
+                 dc.decide("pull_request", "", "", run_git=FakeGit([])),
+                 dc.decide("pull_request", BASE, HEAD, run_git=FakeGit([(1, b"", b"")])),
+                 self.diff(b"")]
+        for r in cases:
+            self.assertEqual(r.e2e, "run", combo(r))
+
+    def test_every_result_is_a_valid_e2e_combination(self):
+        cases = [dc.decide("push", "", "", run_git=FakeGit([])),
+                 dc.decide("workflow_dispatch", "", "", run_git=FakeGit([])),
+                 dc.decide("x", "", "", run_git=FakeGit([])),
+                 dc.decide("pull_request", "", "", run_git=FakeGit([])),
+                 dc.decide("pull_request", BASE, HEAD, run_git=FakeGit([(1, b"", b"")])),
+                 self.diff(b""), self.diff(b"backend/a\x00"), self.diff(b"frontend/a\x00"),
+                 self.diff(b"x\x00"), self.diff(b"docs/a.md\x00"), self.diff(b"infrastructure/docker/e2e/a\x00")]
+        for r in cases:
+            self.assertIn(combo_e2e(r), VALID_COMBOS_E2E)
+
+
 class WriteOutputsTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
@@ -218,7 +307,7 @@ class WriteOutputsTest(unittest.TestCase):
         self.assertEqual(code, 0)
         with open(self.out, encoding="utf-8") as f:
             lines = f.read().splitlines()
-        self.assertEqual(lines, ["backend=run", "frontend=run", "mode=NORMAL", "reason=changed"])
+        self.assertEqual(lines, ["backend=run", "frontend=run", "e2e=run", "mode=NORMAL", "reason=changed"])
 
     def test_summary_has_no_raw_paths(self):
         self.run_main({"EVENT_NAME": "pull_request", "BASE_SHA": BASE, "HEAD_SHA": HEAD})
@@ -227,6 +316,13 @@ class WriteOutputsTest(unittest.TestCase):
         self.assertNotIn("::warning::", text)
         self.assertNotIn("backend/a", text)
         self.assertIn("NORMAL", text)
+
+    def test_summary_has_e2e_rows(self):
+        self.run_main({"EVENT_NAME": "pull_request", "BASE_SHA": BASE, "HEAD_SHA": HEAD})
+        with open(self.summary, encoding="utf-8") as f:
+            text = f.read()
+        self.assertIn("| e2e | run |", text)
+        self.assertIn("| 경로 수(e2e) | 0 |", text)
 
     def test_missing_output_file_env_fails(self):
         code = dc.main(env={"EVENT_NAME": "push"}, run_git=FakeGit([]))
@@ -352,6 +448,27 @@ class TempRepoTest(unittest.TestCase):
         self.git("add", "frontend/z.txt")
         self.git("commit", "-q", "-m", "orphan")
         self.assertEqual(combo(self.decide()), ("run", "run", "FALLBACK", "git_error"))
+
+    def test_e2e_only_change_runs_only_e2e(self):
+        self.branch()
+        self.write("infrastructure/docker/e2e/compose.yml", "x")
+        self.write(".github/workflows/e2e-ci.yml", "y")
+        self.commit("e2e")
+        r = self.decide()
+        self.assertEqual(combo_e2e(r), ("skip", "skip", "run", "NORMAL", "changed"))
+        self.assertIn(("infrastructure/docker/e2e/compose.yml", "e2e"), r.classified)
+
+    def test_frontend_e2e_change_runs_frontend_and_e2e(self):
+        self.branch()
+        self.write("frontend/e2e/login.spec.ts", "z")
+        self.commit("fe-e2e")
+        self.assertEqual(combo_e2e(self.decide()), ("skip", "run", "run", "NORMAL", "changed"))
+
+    def test_docs_only_skips_e2e(self):
+        self.branch()
+        self.write("docs/c.md", "c3")
+        self.commit("docs")
+        self.assertEqual(combo_e2e(self.decide()), ("skip", "skip", "skip", "NORMAL", "docs_only"))
 
     def test_base_advanced_after_branch_ignores_base_only_changes(self):
         self.branch()

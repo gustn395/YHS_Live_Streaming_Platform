@@ -17,11 +17,11 @@
 | --- | --- | --- |
 | Q1 | Backend·Frontend Workflow를 분리한다(`backend-ci.yml`·`frontend-ci.yml`). 각 Workflow는 변경 감지 Job, 조건부 build Job, 최종 Gate Job(`backend-ci`·`frontend-ci`)을 둔다. Workflow에 `paths` 필터를 두지 않는다. Gate는 정상 생략, failure, cancelled, 비정상 skipped를 구분한다. 감지에 실패하면 build를 실제로 실행하고(Fallback), Fallback 성공과 일반 성공을 로그에서 구분한다 | 1차 Q2·보완 |
 | Q2 | 변경 감지는 공통 git diff 스크립트 하나로 한다. base·head SHA와 merge-base를 쓰고 충분한 history를 받는다. `--no-renames`, `-z`로 삭제·이동을 모두 잡는다. Git이 실패하면 양쪽을 실행한다. main push와 `workflow_dispatch`는 전체 실행이다. PR 입력값(제목·브랜치 이름 등)을 Shell에 직접 넣지 않는다. 분류 규칙을 Backend·Frontend에 중복해 두지 않는다 | 1차 Q3·보완 |
-| Q3 | 경로 분류: `backend/**`·`backend-ci.yml` → Backend. `frontend/**`·`frontend-ci.yml` → Frontend. 공통 감지 스크립트, 그 밖의 공통 CI 설정, `.gitignore`, `.env.example`, `.coderabbit.yaml`, 공용 API 계약 → 양쪽. `docs/**`·루트 `*.md` → 생략. 분류되지 않은 경로 → 양쪽. API 계약 경로는 임의로 확정하지 않는다. 규칙의 우선순위와 예외는 구현 계획에서 제시한다(3장) | 1차 Q4·보완 |
+| Q3 (E2E 영역 추가 부분 변경 → [fe06](fe06-e2e-ci.md) Q2) | 경로 분류: `backend/**`·`backend-ci.yml` → Backend. `frontend/**`·`frontend-ci.yml` → Frontend. 공통 감지 스크립트, 그 밖의 공통 CI 설정, `.gitignore`, `.env.example`, `.coderabbit.yaml`, 공용 API 계약 → 양쪽. `docs/**`·루트 `*.md` → 생략. 분류되지 않은 경로 → 양쪽. API 계약 경로는 임의로 확정하지 않는다. 규칙의 우선순위와 예외는 구현 계획에서 제시한다(3장) | 1차 Q4·보완 |
 | Q4 | 공통 CI 결정·검증의 원본은 이 문서다. Frontend 전용 결정은 `FE-D017`부터 frontend decisions.md에 두고 공통 본문을 중복하지 않는다. FE-U07은 Frontend CI(확정, 이 문서)와 E2E(미결, FE-U09)로 나눈다 | 1차 Q6·보완 |
 | Q5 | FE-02 PR에서 Gate Job이 생성된 것을 확인한 뒤 사용자가 Ruleset을 바꾼다. 기존 설정을 백업하고, 필수 체크를 `backend-build`에서 Gate 2개로 바꾸고, 의도적 실패 → 차단 → 되돌리기 → 차단 해제를 확인하고, 복구 절차를 둔다. Merge 뒤 main push·`workflow_dispatch`를 검증한다. 전환 기간에는 다른 PR의 생성·Merge를 보류한다(BE-03 개발은 계속). Merge 뒤 BE-03 브랜치 갱신 절차를 검토한다. GitHub Settings 변경은 사용자가 한다 | 1차 Q7·보완 |
-| Q6 | 감지 스크립트는 Python 3 표준 라이브러리로 쓰고, 로컬 composite action으로 감싸고, unittest로 검증한다. 판정: unittest 실패 → Gate FAIL(Fallback 성공으로 덮지 않음). git diff·merge-base 실패 → 양쪽 Fallback build. 빈 변경 목록 → 양쪽 Fallback. 정상 미변경 → 정상 생략. 감지 Job 취소 → 차단. 결과 누락·형식 오류 → 정상 생략으로 처리하지 않음. Fallback은 build를 실제로 실행해야 하며, 실행하지 않은 build를 성공으로 처리하지 않는다 | 2차 Q1·보완 |
-| Q7 | 빈 변경 목록은 양쪽 Fallback이다. `docs/api/**`는 양쪽을 실행한다(계약 형식·원본 경로는 미결로 둔다) | 2차 Q2 |
+| Q6 (E2E 영역 추가 부분 변경 → [fe06](fe06-e2e-ci.md) Q2·Q3) | 감지 스크립트는 Python 3 표준 라이브러리로 쓰고, 로컬 composite action으로 감싸고, unittest로 검증한다. 판정: unittest 실패 → Gate FAIL(Fallback 성공으로 덮지 않음). git diff·merge-base 실패 → 양쪽 Fallback build. 빈 변경 목록 → 양쪽 Fallback. 정상 미변경 → 정상 생략. 감지 Job 취소 → 차단. 결과 누락·형식 오류 → 정상 생략으로 처리하지 않음. Fallback은 build를 실제로 실행해야 하며, 실행하지 않은 build를 성공으로 처리하지 않는다 | 2차 Q1·보완 |
+| Q7 (E2E 영역 추가 부분 변경 → [fe06](fe06-e2e-ci.md) Q2) | 빈 변경 목록은 양쪽 Fallback이다. `docs/api/**`는 양쪽을 실행한다(계약 형식·원본 경로는 미결로 둔다) | 2차 Q2 |
 | Q8 | 운영 코드에 실패 스위치를 두지 않는다. 실제 git 감지 실패는 임시 Workflow 커밋으로 재현해 Fallback·Gate를 확인한 뒤 되돌린다. PR은 전체 diff를 보므로 FE-02 PR 안에서는 Backend만·Frontend만 바뀐 경우를 검증할 수 없다. 그래서 검증을 L1 단위 테스트, L2 임시 Git 저장소, L3 FE-02 PR 내부, L4 Merge 뒤 별도 검증 PR로 나눈다 | 2차 Q3·보완 |
 | Q9 | 공통 CI 시나리오는 이 문서(4장)에, Frontend 전용 요구사항은 FE-T018에 둔다 | 2차 Q5 |
 | Q10 | Ruleset 전환 직전에 PR #15 상태를 확인한다. 아직 병합되지 않았으면 전환부터 FE-02 Merge와 전환 검증이 끝날 때까지 #15의 Merge를 보류한다(개발·리뷰 대응은 계속). Merge 뒤 필요하면 `git merge origin/main` 또는 GitHub Update branch(merge)로 갱신한다. Rebase·Force Push는 하지 않는다 | 2차 Q6·보완 |
@@ -94,7 +94,8 @@
 
 ## 3. 변경 감지 규칙의 우선순위·예외
 
-위에서부터 처음 맞는 규칙을 쓴다(구현: `.github/ci/detect_changes.py` `classify`).
+위에서부터 처음 맞는 규칙을 쓴다(구현: `.github/ci/detect_changes.py` `classify`). E2E 영역(`e2e` 출력)을 더한 규칙은
+[fe06-e2e-ci.md](fe06-e2e-ci.md) Q2·3장이 원본이다. FE-06 이후 현재 코드는 아래 표에 fe06 3장의 두 규칙을 더한 것이다.
 
 | 순위 | 경로 | 분류 |
 | --- | --- | --- |
