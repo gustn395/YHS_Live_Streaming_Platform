@@ -19,12 +19,16 @@ class SignupServiceTest {
     private static final SignupCommand COMMAND =
             new SignupCommand("tester01", "correct horse battery staple", "tester@example.com", "테스터");
 
+    private static final java.time.Instant NOW = java.time.Instant.parse("2026-11-27T10:00:00Z");
+    private static final java.time.Clock CLOCK = java.time.Clock.fixed(NOW, java.time.ZoneOffset.UTC);
+    private static final java.time.Instant CUTOFF = NOW.minus(java.time.Duration.ofHours(24));
+
     private final FakeMembers members = new FakeMembers();
     private final CountingHasher hasher = new CountingHasher();
 
     @Test
     void breachedPasswordIsRejectedBeforeHashingAndSaving() {
-        SignupService service = new SignupService(members, hasher, password -> Result.BREACHED);
+        SignupService service = new SignupService(members, hasher, CLOCK, password -> Result.BREACHED);
 
         assertThatExceptionOfType(BusinessException.class)
                 .isThrownBy(() -> service.signup(COMMAND))
@@ -36,7 +40,7 @@ class SignupServiceTest {
 
     @Test
     void unavailableCheckRejectsSignup() { // fail-closed
-        SignupService service = new SignupService(members, hasher, password -> Result.UNAVAILABLE);
+        SignupService service = new SignupService(members, hasher, CLOCK, password -> Result.UNAVAILABLE);
 
         assertThatExceptionOfType(BusinessException.class)
                 .isThrownBy(() -> service.signup(COMMAND))
@@ -47,7 +51,7 @@ class SignupServiceTest {
 
     @Test
     void notBreachedPasswordIsHashedAndSaved() {
-        SignupService service = new SignupService(members, hasher, password -> Result.NOT_BREACHED);
+        SignupService service = new SignupService(members, hasher, CLOCK, password -> Result.NOT_BREACHED);
 
         service.signup(COMMAND);
 
@@ -59,7 +63,7 @@ class SignupServiceTest {
     void duplicateUsernameIsReportedWithoutCallingHibp() {
         members.usernameExists = true;
         List<String> checked = new ArrayList<>();
-        SignupService service = new SignupService(members, hasher, password -> {
+        SignupService service = new SignupService(members, hasher, CLOCK, password -> {
             checked.add(password);
             return Result.NOT_BREACHED;
         });
@@ -70,9 +74,32 @@ class SignupServiceTest {
         assertThat(checked).isEmpty();
     }
 
+    @Test
+    void duplicateChecksAndSaveIgnoreExpiredPendingHoldersWithTheSameCutoff() { // MB-T064(MB-D030)
+        SignupService service = new SignupService(members, hasher, CLOCK, password -> Result.NOT_BREACHED);
+
+        service.signup(COMMAND);
+
+        assertThat(members.takenCutoffs).containsExactly(CUTOFF, CUTOFF); // username·이메일 사전 검사
+        assertThat(members.reclaimCutoffs).containsExactly(CUTOFF); // 실제 회수 저장
+        assertThat(members.saved).hasSize(1);
+    }
+
+    @Test
+    void breachedOrUncheckablePasswordReclaimsNothing() { // MB-T064: HIBP 실패 시 회수 작업 없음
+        for (Result result : new Result[] {Result.BREACHED, Result.UNAVAILABLE}) {
+            SignupService service = new SignupService(members, hasher, CLOCK, password -> result);
+            assertThatExceptionOfType(BusinessException.class).isThrownBy(() -> service.signup(COMMAND));
+        }
+        assertThat(members.reclaimCutoffs).isEmpty();
+        assertThat(members.saved).isEmpty();
+    }
+
     private static final class FakeMembers implements MemberRepository {
         boolean usernameExists;
         final List<Member> saved = new ArrayList<>();
+        final List<java.time.Instant> takenCutoffs = new ArrayList<>();
+        final List<java.time.Instant> reclaimCutoffs = new ArrayList<>();
 
         @Override
         public java.util.Optional<Member> findByUsername(String username) {
@@ -105,13 +132,21 @@ class SignupServiceTest {
         }
 
         @Override
-        public boolean existsByUsername(String username) {
+        public boolean isUsernameTaken(String username, java.time.Instant expiredAtOrBefore) {
+            takenCutoffs.add(expiredAtOrBefore);
             return usernameExists;
         }
 
         @Override
-        public boolean existsLocalEmail(String email) {
+        public boolean isLocalEmailTaken(String email, java.time.Instant expiredAtOrBefore) {
+            takenCutoffs.add(expiredAtOrBefore);
             return false;
+        }
+
+        @Override
+        public Member saveReclaimingExpired(Member member, java.time.Instant expiredAtOrBefore) {
+            reclaimCutoffs.add(expiredAtOrBefore);
+            return save(member);
         }
 
         @Override

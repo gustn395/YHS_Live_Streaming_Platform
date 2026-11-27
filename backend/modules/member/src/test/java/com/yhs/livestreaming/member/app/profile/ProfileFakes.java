@@ -91,12 +91,17 @@ final class ProfileFakes {
         }
 
         @Override
-        public boolean existsByUsername(String username) {
+        public boolean isUsernameTaken(String username, Instant expiredAtOrBefore) {
             throw new UnsupportedOperationException();
         }
 
         @Override
-        public boolean existsLocalEmail(String email) {
+        public boolean isLocalEmailTaken(String email, Instant expiredAtOrBefore) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Member saveReclaimingExpired(Member member, Instant expiredAtOrBefore) {
             throw new UnsupportedOperationException();
         }
 

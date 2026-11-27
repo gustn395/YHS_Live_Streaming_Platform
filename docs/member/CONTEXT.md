@@ -19,6 +19,7 @@
 - Refresh(MB-W09, BE-04): 회원이 Refresh Token으로 같은 로그인 세션에서 새 Access·Refresh Token을 받는다. 로그인 세션의 절대 만료 시각(최초 로그인 + 7일)은 그대로이고 늘어나지 않는다. Refresh마다 회원 상태를 다시 확인한다([MB-D020](decisions.md#1-확정-결정), [MB-D021](decisions.md#1-확정-결정)).
 - 로그아웃(MB-W10, BE-04): 회원이 이 브라우저가 쥔 로그인 세션을 서버에서 폐기하고 인증 쿠키를 지운다([MB-D022](decisions.md#1-확정-결정)).
 - 내 정보 조회·수정(MB-W15, BE-07): 로그인한 회원이 자기 정보를 보고 닉네임을 바꾼다. 정지된 회원은 쓸 수 없고 그 세션은 폐기된다([MB-D028](decisions.md#1-확정-결정)). 다른 모듈은 공개 인터페이스로 회원 요약만 조회한다([MB-D029](decisions.md#1-확정-결정)).
+- 만료 PENDING 정리(MB-W16, BE-08): 가입 뒤 24시간 안에 첫 OTP를 마치지 않은 PENDING 회원을 주기 배치로 지우고, 그 회원이 쥔 username·이메일로 누가 가입하면 그 자리에서 회수한다([MB-D030](decisions.md#1-확정-결정)).
 - Google 로그인(MB-W11, BE-05): 방문자가 Google 인증(OIDC)을 1차 인증으로 통과하면 LOCAL과 같이 OTP Challenge가 생기고 이번 Google 이메일로 OTP를 받는다. 처음이면 PENDING GOOGLE 회원이 자동으로 생긴다. OTP를 확인하면 로그인 세션과 토큰이 발급되고 PENDING 회원은 ACTIVE가 된다([MB-D023](decisions.md#1-확정-결정)~[MB-D025](decisions.md#1-확정-결정)).
 
 ## 4. 모듈 용어
@@ -27,6 +28,7 @@
 | --- | --- |
 | 회원(Member) | 내부 회원 ID(memberId)로 식별되는 사용자. 가입 방식과 관계없이 하나의 식별 단위다 |
 | 계정 유형(account type) | 회원이 어떤 방식으로 가입했는지: LOCAL(username·비밀번호) / GOOGLE(OAuth) |
+| 만료 PENDING 회원 | 가입 시각 + 24시간이 지난 PENDING 회원. 로그인·활성화할 수 없고 정리·회수 대상이다(MB-D003, MB-D030) |
 | 계정 상태(account status) | PENDING(가입 직후, 첫 OTP 전) / ACTIVE(사용 가능) / DISABLED(사용 중지) |
 | 이메일 확인 여부(email_verified) | 이메일 소유가 확인됐는지. 계정 상태와 별개의 값이다. 일반 가입은 미확인 PENDING으로 시작하고, 첫 OTP 성공 때 확인됨·ACTIVE가 된다 |
 | 문맥 단어(context word) | 비밀번호로 쓸 수 없는 서비스 이름, username과 그 파생어 |

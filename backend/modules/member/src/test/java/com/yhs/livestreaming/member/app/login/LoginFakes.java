@@ -45,13 +45,18 @@ final class LoginFakes {
         }
 
         @Override
-        public boolean existsByUsername(String username) {
+        public boolean isUsernameTaken(String username, Instant expiredAtOrBefore) {
             return byUsername.containsKey(username);
         }
 
         @Override
-        public boolean existsLocalEmail(String email) {
+        public boolean isLocalEmailTaken(String email, Instant expiredAtOrBefore) {
             return false;
+        }
+
+        @Override
+        public Member saveReclaimingExpired(Member member, Instant expiredAtOrBefore) {
+            return member;
         }
 
         @Override

@@ -395,13 +395,18 @@ class AuthStoreFailureIntegrationTest {
         MemberRepository failingMemberRepository(MemberRepositoryAdapter real, FailSwitch failSwitch) {
             return new MemberRepository() {
                 @Override
-                public boolean existsByUsername(String username) {
-                    return real.existsByUsername(username);
+                public boolean isUsernameTaken(String username, Instant expiredAtOrBefore) {
+                    return real.isUsernameTaken(username, expiredAtOrBefore);
                 }
 
                 @Override
-                public boolean existsLocalEmail(String email) {
-                    return real.existsLocalEmail(email);
+                public boolean isLocalEmailTaken(String email, Instant expiredAtOrBefore) {
+                    return real.isLocalEmailTaken(email, expiredAtOrBefore);
+                }
+
+                @Override
+                public Member saveReclaimingExpired(Member member, Instant expiredAtOrBefore) {
+                    return real.saveReclaimingExpired(member, expiredAtOrBefore);
                 }
 
                 @Override

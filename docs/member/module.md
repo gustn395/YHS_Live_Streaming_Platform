@@ -31,6 +31,7 @@
 | `app.limit` | `MemberLimitProperties`, `RequestRateLimiter`(포트), `LoginAttemptLimiter`(포트), `RateLimitScope` | 제한 수치·포트([MB-D017](decisions.md#1-확정-결정)·[MB-D018](decisions.md#1-확정-결정)·[MB-D027](decisions.md#1-확정-결정)) |
 | `app.session` | `LoginSessionStore`(포트: create·findRefresh·rotate·revoke), `NewLoginSession`, `RefreshTokenRecord`, `RefreshRotation`, `RandomTokens`, `MemberAccessTokenRoles` | 세션·Refresh 저장·교체·폐기 계약, 256비트 난수·SHA-256, JWT `role` 허용 값 |
 | `app.profile` | `MemberProfileService`, `MemberProfile`, `MemberQueryService`(공개 인터페이스 구현, package-private) | 내 정보 조회·닉네임 수정과 매 요청 상태 재확인([MB-D028](decisions.md#1-확정-결정)), 다른 모듈용 회원 조회 구현([MB-D029](decisions.md#1-확정-결정)) |
+| `app.cleanup` | `PendingMemberCleanupService`, `ExpiredPendingMemberStore`(포트), `MemberCleanupProperties`, `MemberCleanupConfig`, `CleanupResult` | 만료 PENDING 정리 배치([MB-D030](decisions.md#1-확정-결정)) |
 | `app.api` | `MemberQueryApi`, `MemberSummary`, `MemberAccountStatus` | 다른 모듈이 참조할 수 있는 유일한 member 패키지([G-D015](../policy.md#3-공통-결정-이력)) |
 | `app.password` | `DummyPasswordHash` | 없는 username·GOOGLE 로그인의 같은 비용 비교 |
 | `out` | `MemberJpaRepository`, `MemberRepositoryAdapter`, `OAuthAccountJpaRepository`, `GoogleAccountRepositoryAdapter`(트랜잭션 직접, provider·sub UNIQUE 충돌만 동시 가입으로 변환), `HibpPwnedPasswordsClient`, `HibpProperties`, `HibpClientConfig` | HIBP: 아래 "유출 비밀번호 검사". 저장: `saveAndFlush`로 즉시 INSERT하고, `uk_members_username`·`ux_members_local_email` 위반만 409로 바꾼다. 그 밖의 제약 위반은 제약 이름·SQLState만 WARN으로 남기고 원인 없는 `IllegalStateException`(500)으로 던진다(DB 상세에 든 개인정보를 응답·로그에 싣지 않으려고). 로그인용 `findByUsername`·`findById`, 조건부 UPDATE 2개(재해시: 기존 해시 조건, 활성화: PENDING·`created_at > now-24h` 조건, 둘 다 짧은 트랜잭션 하나) |
@@ -123,6 +124,17 @@ username·IP는 SHA-256 hex로 키에 쓴다. 원문이 키 목록에 남지 않
 - 닉네임 수정(`changeNickname`): 포트 `MemberRepository.updateNicknameOfActive`(어댑터는 ACTIVE 조건 UPDATE 한 문장) → 0행이면 위 상태 확인(세션 폐기·예외), 그 사이 다시 ACTIVE면 한 번 더 시도(또 0행이면 상태를 다시 확인해 정지·삭제면 세션 폐기·403/401, 여전히 ACTIVE면 `IllegalStateException`) → 다시 읽어 응답. UPDATE가 반영된 뒤에는 바로 정지돼도 바뀐 정보를 200으로 돌려준다(커밋한 변경을 403으로 알리지 않음). 닉네임 형식은 `NicknameUpdateRequest`(앞뒤 공백 제거, 2~20자, Cc·Cf 금지)가 검증한다.
 - 컨트롤러(`ApiV1MemberController`): 401(회원 없음)·403(DISABLED)일 때만 `AuthCookieWriter.clearTokens`. 공개 경로가 아니라 global 체인이 인증을 요구한다.
 - OpenAPI(`MemberOpenApiConfig`, `OperationCustomizer`): `ApiV1MemberController` operation의 보안 요구사항이 여러 개면 하나로 합친다(배열 원소는 OR, 원소 안의 스킴은 AND라서 PATCH는 "Access 쿠키 그리고 CSRF 헤더").
+
+### 만료 PENDING 정리 (BE-08)
+
+- 배치(`PendingMemberCleanupService`): 실행 시작 때 앱 Clock으로 기준 시각(지금 - 24시간)을 한 번 정하고, LOCAL → GOOGLE 순서로 `ExpiredPendingMemberStore`를 배치 크기만큼 반복 호출한다. 메서드에는 트랜잭션이 없고 배치마다 어댑터가 자기 트랜잭션을 연다. 끝 판정은 "고른 대상 수 < 배치 크기"이고(지운 수로 판정하지 않음), 커서는 고른 대상의 마지막 ID로 나아간다(OFFSET 없음, 0행이어도 끝남). 커서가 나아가지 않으면(저장소 이상) 그 유형을 멈춰 무한 반복을 막는다. 배치가 실패하면 그 유형은 멈추고 커밋된 수만 결과에 남는다. 로그: 모두 성공이면 INFO `local·google·elapsedMs·completed=true`, 일부 실패면 같은 요약을 WARN으로 남기고 배치 실패 WARN에는 유형·커밋된 수·예외 클래스 이름만 남긴다.
+- 어댑터(`ExpiredPendingMemberStoreAdapter`, `TransactionTemplate`): `findExpiredPendingIds`(유형·PENDING·`created_at <= 기준`·`id > 커서` ORDER BY id, `Limit`) → LOCAL은 `deleteExpiredPendingIn`(같은 조건 재확인). GOOGLE은 그 시점 조건을 만족하는 회원 ID → `deleteLinksOf`(연결 행 먼저, MB-D025) → `deleteExpiredPendingIn` → 대상 중 남은 회원이 있으면 배치 롤백(연결 행만 지워진 상태를 커밋하지 않음). 회원당 연결 행 수는 스키마로 보장되지 않아 회원 ID 기준으로 본다. 다른 트랜잭션이 먼저 지운 회원은 정상으로 본다.
+- 스케줄러(`in.PendingMemberCleanupScheduler`, `SchedulingConfigurer`): 검증된 `MemberCleanupProperties.interval`로 `FixedDelayTask`(고정 지연·첫 지연 = interval)를 등록한다. `member.cleanup.enabled=false`면 빈이 없다(테스트 프로필). 실패는 WARN 뒤 삼킨다. 스케줄링 활성화는 global `GlobalSchedulingConfig`(G-D016).
+- 설정(`MemberCleanupProperties`): `enabled` 기본 true, `interval` 기본 1시간(0 이하면 기동 실패), `batch-size` 기본 500(1~10,000).
+- LOCAL 가입 시 즉시 회수: `SignupService`가 기준 시각 하나로 `isUsernameTaken`·`isLocalEmailTaken`(만료 LOCAL PENDING은 세지 않음) → HIBP·해시(트랜잭션 밖) → `saveReclaimingExpired`(한 트랜잭션: `deleteExpiredLocalHolders` 조건부 삭제 → `saveAndFlush`). 실패하면 삭제도 롤백되고, 예외 변환은 롤백 뒤 `save`와 같은 규칙(username·LOCAL 이메일 UNIQUE만 409, 그 밖은 상세 없는 서버 오류).
+- 동시성: 활성화(만료 전만)와 정리(만료 후만)는 조건이 겹치지 않는다. 배치·재생성·활성화·이메일 갱신은 모두 연결 행 → 회원 행 순서다. 다중 인스턴스 중복 실행 방지는 두지 않는다(G-D016).
+- Redis: 정리·회수는 Redis를 쓰지 않는다. 남는 OTP Challenge(회원 ID 기준, 10분)·로그인 실패 카운터와 차단 키(`sha256(username)` 기준)는 TTL에 맡긴다. 새 회원은 새 ID(IDENTITY, 재사용 없음)라 이전 Challenge로 인증할 수 없고, 같은 username의 실패 카운터는 MB-D017("없는 username에도 같은 규칙")대로 이어진다.
+- 인덱스: 정리 조회는 `members`를 조건으로 훑고, GOOGLE 연결 행 삭제·FK 확인은 `member_oauth_accounts.member_id`에 인덱스가 없다. 현재 규모에서는 새 인덱스·Flyway 변경을 하지 않는다(필요해지면 추가).
 
 ## 3. 공개 API
 
